@@ -1,7 +1,7 @@
 # https://docs.searxng.org/admin/engines/settings.html
 services:
   searxng:
-    image: searxng/searxng:latest
+    image: searxng/searxng:2026.9.15-ca4965040
     container_name: searxng
     restart: unless-stopped
     ports:
@@ -25,6 +25,19 @@ services:
     depends_on:
       valkey:
         condition: service_healthy
+    # Same s6/root-entrypoint privilege-drop set as the other hardened services
+    # in this repo (see docs/HARD-WON-GOTCHAS.md) — the image stays root for
+    # update-ca-certificates and writing ./settings.yml/./limiter.toml on boot.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test:
         - CMD
@@ -54,6 +67,16 @@ services:
     restart: unless-stopped
     volumes:
       - valkey-data:/data
+    # Entrypoint chowns ./data then setpriv's from root to the valkey user — needs
+    # the same CHOWN/SETUID/SETGID as Postgres's drop dance (docs/HARD-WON-GOTCHAS.md).
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - path: ../.env
         required: false

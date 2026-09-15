@@ -1,18 +1,17 @@
 services:
-  flaresolverr:
-    image: 'ghcr.io/flaresolverr/flaresolverr:v3.5.2'
-    container_name: flaresolverr
+  daily-stars-explorer:
+    image: 'ghcr.io/emanuelef/daily-stars-explorer:20260913-1246'
+    container_name: daily-stars-explorer
     restart: unless-stopped
-    init: true
-    # Already runs as non-root "flaresolverr"; its bundled Chromium runs with
-    # --no-sandbox, so no extra caps are needed (see docs/HARD-WON-GOTCHAS.md,
-    # "Chromium capability advice" — test the actual image, don't assume SYS_ADMIN).
+    # Runs as root with no privilege-drop dance (plain Go binary entrypoint, no
+    # s6-overlay/PUID-PGID pattern — see Dockerfile upstream). Live-tested with
+    # zero extra capabilities; don't add any without re-testing (docs/HARD-WON-GOTCHAS.md).
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
     ports:
-      - "127.0.0.1:${FLARESOLVERR_PORT:-8191}:8191"
+      - "127.0.0.1:${DAILY_STARS_PORT:-8080}:8080"
     env_file:
       - path: ../.env
         required: false
@@ -24,16 +23,15 @@ services:
         required: false
     environment:
       - TZ=${TZ:-Europe/Paris}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_FILE=none
-      - LOG_HTML=false
-      - CAPTCHA_SOLVER=none
+      - HOST=0.0.0.0
+      - PORT=8080
     healthcheck:
       test:
         - CMD
-        - curl
-        - '-f'
-        - 'http://127.0.0.1:8191'
+        - wget
+        - '-q'
+        - '--spider'
+        - 'http://127.0.0.1:8080/health'
       interval: 10s
       timeout: 5s
       retries: 3
@@ -42,7 +40,7 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 1024M
+          memory: 512M
     logging:
       driver: "json-file"
       options:

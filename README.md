@@ -23,7 +23,21 @@ This repository contains a highly optimized, production-grade, and resilient mul
 
 This compose stack is built with the highest standards of production container orchestration:
 
-### 1. 🌲 Hierarchical Environment Overrides
+### 1. 📌 Pinned Image Versions
+Every image is pinned to a specific version tag (never `:latest`), so upgrades are
+explicit and reviewable rather than silent. [Renovate](https://docs.renovatebot.com/)
+runs weekly (`.github/workflows/check-upstream-release.yml`) to open version-bump PRs
+as upstream releases land.
+
+### 2. 🔒 Container Hardening
+Every container drops all Linux capabilities by default (`cap_drop: [ALL]`) and adds
+back only what its entrypoint actually needs — the s6-overlay/PUID-PGID root→user
+privilege-drop set for LinuxServer-style images, or nothing at all for images that
+already run as non-root. `security_opt: [no-new-privileges:true]` is set throughout.
+See [`docs/HARD-WON-GOTCHAS.md`](docs/HARD-WON-GOTCHAS.md) for the reasoning and the
+traps this avoids (a bare `cap_drop: ALL` breaks the root→user drop dance).
+
+### 3. 🌲 Hierarchical Environment Overrides
 All service definitions support a modern, 4-layered environment file hierarchy. Variables are evaluated sequentially (later files override/supersede earlier ones), allowing host-specific overrides to be kept strictly separate from the base configurations:
 ```yaml
     env_file:
@@ -37,18 +51,18 @@ All service definitions support a modern, 4-layered environment file hierarchy. 
         required: false
 ```
 
-### 2. 🛡️ 100% Secure & Public Ready
+### 4. 🛡️ 100% Secure & Public Ready
 *   **Zero Hardcoded Secrets**: Cryptographic keys like `SEARXNG_SECRET` are passed dynamically from `.env` using environment variables. No secrets are stored in `settings.yml`.
 *   **Privacy-Friendly Directory Mounts**: Your physical host storage directories (e.g. `/mnt/...`) are kept in your local `.env` and are strictly excluded from version control via `.gitignore`.
 *   **Clean `.env.example`**: A fully commented template is provided for a seamless open-source setup experience.
 
-### 3. 📉 Resource Boundaries
+### 5. 📉 Resource Boundaries
 Every container is capped with memory and CPU boundaries using Docker's `deploy.resources.limits` configuration to prevent memory leaks or background loop bugs from freezing your host system.
 
-### 4. 🪵 Log Rotations
+### 6. 🪵 Log Rotations
 To protect your host disk from filling up, all containers are constrained to standard JSON file logging rotations (`max-size: "10m"`, `max-file: "3"`).
 
-### 5. 🧟 Zombie Process Reaping
+### 7. 🧟 Zombie Process Reaping
 Containers running headless Chromium instances (`browser-sockpuppet-chrome` and `flaresolverr`) are configured with `init: true`. This invokes the lightweight Docker init-system to automatically reap zombie child processes.
 
 ---
@@ -66,6 +80,7 @@ Containers running headless Chromium instances (`browser-sockpuppet-chrome` and 
     ```bash
     openssl rand -hex 32
     ```
+5.  If you're enabling the optional MetaMCP service, generate its two required secrets the same way and set them under `BETTER_AUTH_SECRET` and `METAMCP_POSTGRES_PASSWORD` — both fail the container on startup if left as the placeholder.
 
 ### Running the Services
 Bring up the entire stack in the background:
@@ -89,3 +104,13 @@ docker compose ps
 | **ChangeDetection** | `5000` | `5000` | `CHANGEDETECTION_PORT` |
 | **Flaresolverr** | `8191` | `8191` | `FLARESOLVERR_PORT` |
 | **Jellyfin** | *Host Network* | `8096` | *Managed via Host Net* |
+| **Browser** (web UI) | `3000` | `3000` | `BROWSER_UI_PORT` |
+| **Browser** (CDP) | `9223` | `9223` | `BROWSER_CDP_PORT` |
+| **MetaMCP** | `12008` | `12008` | `METAMCP_PORT` |
+| **Daily Stars Explorer** | `8080` | `8080` | `DAILY_STARS_PORT` |
+
+---
+
+## 📜 License
+
+MIT — see [`LICENSE`](LICENSE).

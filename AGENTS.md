@@ -125,6 +125,27 @@ ports:
   - "127.0.0.1:${SEARXNG_PORT:-8888}:${SEARXNG_PORT:-8888}"
 ```
 
+### 6. Capability Hardening 🔒
+Every service **must** drop all Linux capabilities and add back only what its actual
+entrypoint needs — never leave a container on the Docker default capability set.
+Read the entrypoint (`docker run --rm --entrypoint cat <image> <path-to-entrypoint>`)
+before guessing. Two patterns cover almost everything in this repo (see
+`docs/HARD-WON-GOTCHAS.md`, "Container capabilities"):
+```yaml
+# s6-overlay / PUID-PGID images (LinuxServer-style, Postgres) that start as root,
+# chown their data, then drop to a service user:
+cap_drop: [ALL]
+cap_add:  [CHOWN, FOWNER, DAC_OVERRIDE, SETUID, SETGID]
+security_opt: [no-new-privileges:true]
+
+# Images that already run as a non-root user (no privilege-drop dance needed):
+cap_drop: [ALL]
+security_opt: [no-new-privileges:true]
+```
+For a Chromium-based image, do not assume it needs `SYS_ADMIN` or
+`seccomp=unconfined` — test the actual image against a real CDP call first; several
+in this repo needed neither.
+
 ---
 
 ## 🔌 Service Configurations Reference

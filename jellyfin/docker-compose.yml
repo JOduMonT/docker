@@ -1,7 +1,7 @@
 ---
 services:
   jellyfin:
-    image: lscr.io/linuxserver/jellyfin:latest
+    image: lscr.io/linuxserver/jellyfin:12.1ubu2604-ls49
     container_name: jellyfin
     restart: unless-stopped
     network_mode: host
@@ -28,6 +28,18 @@ services:
       - PGID=${PGID:-100}
       - TZ=${TZ:-Europe/Paris}
       - DOCKER_MODS=linuxserver/mods:jellyfin-amd
+    # s6-overlay root->PUID/PGID drop dance — same set as qbittorrent/changedetection/
+    # postgres in this repo (docs/HARD-WON-GOTCHAS.md).
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
       interval: 15s

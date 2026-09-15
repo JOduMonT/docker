@@ -17,9 +17,9 @@ services:
       POSTGRES_HOST: ${METAMCP_POSTGRES_HOST:-metamcp-postgres}
       POSTGRES_PORT: ${METAMCP_POSTGRES_PORT:-5432}
       POSTGRES_USER: ${METAMCP_POSTGRES_USER:-metamcp_user}
-      POSTGRES_PASSWORD: ${METAMCP_POSTGRES_PASSWORD:-m3t4mcp}
+      POSTGRES_PASSWORD: "${METAMCP_POSTGRES_PASSWORD:?must be set — generate with openssl rand -hex 32}"
       POSTGRES_DB: ${METAMCP_POSTGRES_DB:-metamcp_db}
-      DATABASE_URL: postgresql://${METAMCP_POSTGRES_USER:-metamcp_user}:${METAMCP_POSTGRES_PASSWORD:-m3t4mcp}@${METAMCP_POSTGRES_HOST:-metamcp-postgres}:${METAMCP_POSTGRES_PORT:-5432}/${METAMCP_POSTGRES_DB:-metamcp_db}
+      DATABASE_URL: postgresql://${METAMCP_POSTGRES_USER:-metamcp_user}:${METAMCP_POSTGRES_PASSWORD:?must be set — generate with openssl rand -hex 32}@${METAMCP_POSTGRES_HOST:-metamcp-postgres}:${METAMCP_POSTGRES_PORT:-5432}/${METAMCP_POSTGRES_DB:-metamcp_db}
       APP_URL: ${METAMCP_APP_URL:-http://localhost:12008}
       NEXT_PUBLIC_APP_URL: ${METAMCP_APP_URL:-http://localhost:12008}
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?must be set — generate with openssl rand -hex 32}"
@@ -60,7 +60,7 @@ services:
     environment:
       POSTGRES_DB: ${METAMCP_POSTGRES_DB:-metamcp_db}
       POSTGRES_USER: ${METAMCP_POSTGRES_USER:-metamcp_user}
-      POSTGRES_PASSWORD: ${METAMCP_POSTGRES_PASSWORD:-m3t4mcp}
+      POSTGRES_PASSWORD: "${METAMCP_POSTGRES_PASSWORD:?must be set — generate with openssl rand -hex 32}"
     volumes:
       # Postgres 18+ wants a SINGLE mount at /var/lib/postgresql, NOT the older
       # /var/lib/postgresql/data — it manages the version subdirectory itself.
