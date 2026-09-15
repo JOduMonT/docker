@@ -156,6 +156,7 @@ Use the current configurations as guides for implementing new ones:
 *   **qBittorrent**: Capped at `2048M` memory. Binds media & download environment paths.
 *   **Jellyfin**: Designed with `network_mode: host` to access local network streams and binds host devices `/dev/dri` and `/dev/kfd` for native AMD hardware-accelerated transcoding.
 *   **ChangeDetection**: Paired with `browser-sockpuppet-chrome` (running headless Chromium with `SYS_ADMIN` capability, `init: true`, and capped at `1536M` memory/`2.0` CPU limits).
+*   **Kali Desktop**: LinuxServer Selkies-based Kali (`linuxserver/docker-baseimage-selkies`). AMD/Vulkan GPU accel via `/dev/dri` (`DRINODE`/`DRI_NODE`, no CUDA — NVIDIA-only), CPU/llvmpipe fallback documented inline. Bind-mounts the real host `/home/jond`. **Deliberately omits `no-new-privileges:true`** (breaks `sudo`, which Kali's toolkit — nmap, aircrack-ng, apt — depends on) and adds `NET_RAW`/`NET_ADMIN` on top of the standard s6-overlay cap set; see `docs/HARD-WON-GOTCHAS.md`. Loopback-bound ports to offset the reduced hardening. Off by default in the root `include:`.
 
 ---
 
