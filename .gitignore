@@ -9,6 +9,7 @@
 **/config/
 **/data/
 valkey-data/
+kali-desktop/opt/
 
 # OS and system files
 .DS_Store

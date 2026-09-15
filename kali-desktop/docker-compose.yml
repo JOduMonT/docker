@@ -1,0 +1,103 @@
+---
+services:
+  kali-desktop:
+    # Kali Linux built on linuxserver/docker-baseimage-selkies (s6-overlay, WebRTC
+    # desktop streaming). Pinned to an immutable content-addressed tag, not
+    # amd64-latest — see AGENTS.md "Pinned Image Versions".
+    image: lscr.io/linuxserver/kali-linux:amd64-45f3494e-ls127
+    container_name: kali-desktop
+    restart: unless-stopped
+    shm_size: "1gb" # LSIO desktop images recommend >=1gb; XFCE/browsers crash on the 64MB default.
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.local
+        required: false
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      - PUID=${PUID:-1000}
+      # This service bind-mounts the real /home/jond (below) — set PGID in your
+      # .env to match `id -g jond` on the host (typically 1000) for correct file
+      # ownership. The repo-wide PGID default (100) is tuned for shared media
+      # groups on other services and is usually wrong here.
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Paris}
+      # AMD/Mesa GPU acceleration for the Radeon 780M iGPU (Vulkan/EGL via /dev/dri).
+      # No NVIDIA/CUDA vars — CUDA is NVIDIA-only and this GPU is AMD.
+      - DRINODE=${KALI_GPU_RENDER_NODE:-/dev/dri/renderD128}
+      - DRI_NODE=${KALI_GPU_RENDER_NODE:-/dev/dri/renderD128} # same node as DRINODE = zero-copy encode
+      - PIXELFLUX_WAYLAND=true # GPU-accelerated Wayland/EGL path; auto-falls back to X11 if the CPU lacks AVX2
+    # --- GPU passthrough (AMD Radeon 780M) ---
+    # To run CPU-only (software rendering via Mesa llvmpipe) instead — e.g. no
+    # GPU present, or debugging a GPU-related crash — comment out `devices:`,
+    # `group_add:`, and the DRINODE/DRI_NODE/PIXELFLUX_WAYLAND lines above.
+    # Selkies/Mesa will automatically fall back to llvmpipe with no other
+    # changes needed; expect much higher CPU usage and lower frame rate.
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      # Host GIDs owning /dev/dri/render* and /dev/dri/card* — check with
+      # `getent group render video` on the host and override in .env if different.
+      - "${KALI_GPU_RENDER_GID:-990}"
+      - "${KALI_GPU_VIDEO_GID:-44}"
+    ports:
+      # Loopback-bound per this repo's convention (admin/desktop interface).
+      # The container gets full GUI + sudo access to run Kali's toolkit, so
+      # treat it like a local admin surface: widen only behind a VPN/reverse
+      # proxy with SELKIES_MASTER_TOKEN set, never expose raw to the Internet
+      # (upstream's own warning: "privileged access to the host system").
+      - "127.0.0.1:${KALI_DESKTOP_HTTP_PORT:-3010}:3000"  # web desktop, HTTP
+      - "127.0.0.1:${KALI_DESKTOP_HTTPS_PORT:-3011}:3001" # web desktop, HTTPS (required for clipboard/audio)
+    volumes:
+      # abc/PUID user's home inside the container — dotfiles, ~/.config,
+      # ~/.local, Desktop, Downloads. Everything installed or configured
+      # through the desktop session that doesn't touch system paths lives
+      # here and survives `docker compose up -d --force-recreate`.
+      - ./config:/config
+      # Payload directory for .deb apps that install into /opt (e.g. Obsidian).
+      # See README.md for the two supported ways to make manually-installed
+      # .deb apps survive a container recreate.
+      - ./opt:/opt
+      # Real host home directory for jond, mounted read-write so the desktop
+      # session can browse/edit the same files as the host.
+      - ${KALI_DESKTOP_HOME_DIR:-/home/jond}:/home/jond
+    # s6-overlay root->PUID/PGID drop dance — same set as jellyfin/qbittorrent/
+    # changedetection/postgres in this repo (docs/HARD-WON-GOTCHAS.md). NET_RAW
+    # and NET_ADMIN are added on top because Kali's core toolkit (nmap SYN/raw
+    # scans, arp/ARP spoofing tools, wireless tools) needs them to function at all.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - NET_RAW
+      - NET_ADMIN
+    # Deliberately NOT setting `security_opt: [no-new-privileges:true]` here,
+    # unlike every other service in this repo. Kali's toolkit is designed
+    # around `sudo` (setuid) for tools that need root — nmap, aircrack-ng,
+    # wireless/BT tooling, apt itself. no-new-privileges blocks the kernel from
+    # honoring the setuid bit on execve, which silently breaks sudo entirely.
+    # Mitigate by keeping this on loopback-only (see `ports:` above) instead of
+    # dropping the sandboxing another way.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/ -o /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s # full XFCE/Selkies desktop boot is slower than a typical service
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 6144M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

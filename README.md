@@ -14,6 +14,7 @@ This repository contains a highly optimized, production-grade, and resilient mul
 6.  **[Flaresolverr](https://github.com/FlareSolverr/FlareSolverr)**: (Optional) Proxy server to bypass DDoS protection mechanisms for scraping and indices.
 7.  **[Browser](https://github.com/coollabsio/openclaw)**: (Optional) Shared Chrome/CDP sidecar — a real browser on tap for scraping and automation, with a web desktop UI. Migrated here 2026-09-07 from its own repo.
 8.  **[MetaMCP](https://github.com/metatool-ai/metamcp)**: (Optional) MCP gateway with a bundled hardened Postgres 18. Migrated here 2026-09-07 from its own repo.
+9.  **[Kali Desktop](https://docs.linuxserver.io/images/docker-kali-linux/)**: (Optional) Full Kali Linux desktop streamed to the browser via Selkies, with AMD/Vulkan GPU acceleration for a Radeon 780M iGPU and the host's `/home/jond` mounted in.
 
 > **Production note:** production self-hosting runs on [Cloudron](https://cloudron.io) (automatic maintenance, updates and backups). This repo is the **local Docker + Docker Compose** side. The former Coolify fleet is retired; the hard-won operational lessons from it are preserved in [`docs/HARD-WON-GOTCHAS.md`](docs/HARD-WON-GOTCHAS.md).
 
@@ -108,6 +109,65 @@ docker compose ps
 | **Browser** (CDP) | `9223` | `9223` | `BROWSER_CDP_PORT` |
 | **MetaMCP** | `12008` | `12008` | `METAMCP_PORT` |
 | **Daily Stars Explorer** | `8080` | `8080` | `DAILY_STARS_PORT` |
+| **Kali Desktop** (HTTP) | `3010` | `3000` | `KALI_DESKTOP_HTTP_PORT` |
+| **Kali Desktop** (HTTPS) | `3011` | `3001` | `KALI_DESKTOP_HTTPS_PORT` |
+
+---
+
+## 🖥️ Kali Desktop: GPU, persistence, and installing apps
+
+Optional service, off by default. Uncomment `./kali-desktop/docker-compose.yml`
+in the root `include:` block to enable it.
+
+**Start it:**
+```bash
+docker compose up -d kali-desktop
+```
+
+**Access it:** open `https://localhost:3011` (accept the self-signed cert —
+HTTPS is required for clipboard/audio/file transfer). The plain HTTP port
+(`3010`) also works for a quick check but skips those features. Both are
+loopback-bound by default; widen only behind a VPN or reverse proxy, since
+this container has `sudo` and full access to Kali's toolkit.
+
+**GPU (AMD Radeon 780M):** accelerated by default via `/dev/dri` + Mesa/Vulkan
+(no CUDA — that's NVIDIA-only). If `KALI_GPU_RENDER_GID`/`KALI_GPU_VIDEO_GID`
+in `.env` don't match your host, check with `getent group render video`. To
+fall back to CPU/software rendering (Mesa llvmpipe), comment out the
+`devices:`, `group_add:`, and `DRINODE`/`DRI_NODE`/`PIXELFLUX_WAYLAND` lines in
+`kali-desktop/docker-compose.yml` — no other changes needed.
+
+**What persists across `docker compose up -d --force-recreate`:**
+- `kali-desktop/config/` → the desktop user's home (`/config`): dotfiles,
+  `~/.config`, `~/.local`, Desktop, Downloads.
+- `kali-desktop/opt/` → `/opt`, where many `.deb` packages (including
+  Obsidian) install their payload.
+- Your real `/home/jond`, bind-mounted read-write at the same path.
+
+**Installing a manual `.deb` app (e.g. Obsidian) so it survives a recreate:**
+
+Method A — no root, guaranteed to persist (recommended):
+```bash
+mkdir -p ~/Applications && cd ~/Applications
+wget https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/obsidian_1.13.7_amd64.deb
+dpkg-deb -x obsidian_1.13.7_amd64.deb obsidian
+mkdir -p ~/.local/bin ~/.local/share/applications
+ln -sf ~/Applications/obsidian/opt/Obsidian/obsidian ~/.local/bin/obsidian
+# copy the app's .desktop file and fix its Exec= line to the symlink above
+cp ~/Applications/obsidian/usr/share/applications/*.desktop ~/.local/share/applications/
+```
+Everything here lives under `/config`, which is already persisted.
+
+Method B — real `apt`/`dpkg` install (integrates with the package manager, but
+needs a re-run after recreate):
+```bash
+sudo dpkg -i obsidian_1.13.7_amd64.deb
+```
+The payload lands in `/opt` (persisted), but the `dpkg` database entry and the
+`/usr/bin` symlink/desktop entry are not (only `/config` and `/opt` are
+volumed). After a container recreate, keep the `.deb` under `~/Downloads`
+(persisted) and re-run `sudo dpkg -i` — it's fast since the `/opt` payload is
+already there, it just relinks.
 
 ---
 

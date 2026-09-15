@@ -59,6 +59,17 @@ actually needed was the same privilege-drop set as Postgres above, for the same
 underlying reason. **Test the actual image before importing advice about its
 class.**
 
+**`security_opt: [no-new-privileges:true]` silently breaks `sudo` (and any
+other setuid binary).** It stops the kernel from honoring the setuid bit on
+`execve`, which is how `sudo` gains root in the first place — the binary still
+runs, it just never elevates, so the failure mode is "command ran, did
+nothing privileged" rather than an obvious permission error. Fine for images
+that never need setuid escalation (the vast majority in this repo). Wrong for
+`kali-desktop`, whose entire toolkit (`nmap` raw/SYN scans, `aircrack-ng`,
+wireless tooling, `apt` itself) is built around `sudo`. That service
+intentionally omits the flag and relies on loopback-only port binding instead
+— see `kali-desktop/docker-compose.yml`.
+
 **Passing local tests do not guarantee the config survives a real first boot.** A
 second image in the same deployment passed local testing under `cap_drop: ALL`
 and then crash-looped in production, because the local runs never combined the
