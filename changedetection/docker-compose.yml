@@ -1,7 +1,7 @@
 # https://github.com/linuxserver/docker-changedetection.io
 services:
   changedetection:
-    image: lscr.io/linuxserver/changedetection.io:latest
+    image: lscr.io/linuxserver/changedetection.io:0.60.6
     container_name: changedetection
     restart: unless-stopped
     ports:
@@ -22,6 +22,18 @@ services:
       - PGID=${PGID:-100}
       - TZ=${TZ:-Europe/Paris}
       - PLAYWRIGHT_DRIVER_URL=ws://browser-sockpuppet-chrome:3000
+    # s6-overlay root->PUID/PGID drop dance — same set as jellyfin/qbittorrent/
+    # postgres in this repo (docs/HARD-WON-GOTCHAS.md).
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test:
         - CMD
@@ -46,12 +58,19 @@ services:
 
   browser-sockpuppet-chrome:
     hostname: browser-sockpuppet-chrome
-    image: dgtlmoon/sockpuppetbrowser:latest
+    image: dgtlmoon/sockpuppetbrowser:0.0.3
     container_name: browser-sockpuppet-chrome
     restart: unless-stopped
     init: true
+    # Already runs as non-root "chrome" — no privilege-drop dance needed, but
+    # scope capabilities to just what Chrome's sandbox needs instead of the
+    # full default set (see docs/HARD-WON-GOTCHAS.md, "Chromium capability advice").
+    cap_drop:
+      - ALL
     cap_add:
       - SYS_ADMIN
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - path: ../.env
         required: false

@@ -32,15 +32,21 @@ jobs:
       - name: Seed environment
         run: |
           cp .env.example .env
+          # Also covers BETTER_AUTH_SECRET and METAMCP_POSTGRES_PASSWORD, which
+          # share this placeholder in .env.example (metamcp isn't in this matrix,
+          # but the compose file is still parsed by `docker compose config` calls
+          # elsewhere, so it must resolve).
           sed -i 's/replace_this_with_your_random_openssl_generated_hex_secret_key/d3b07384d113edec49eaa6238ad5ff00/g' .env
-          # metamcp needs a real secret; harmless for the others.
-          echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> .env
           if [ -f "${{ matrix.service }}/.env.example" ]; then
             cp "${{ matrix.service }}/.env.example" "${{ matrix.service }}/.env"
           fi
 
       - name: Start the stack
-        run: docker compose -f "${{ matrix.service }}/docker-compose.yml" up -d
+        # --env-file is required: `docker compose -f <subdir>/x.yml` alone resolves
+        # the default .env relative to the compose file's directory, not the repo
+        # root, so top-level ${VAR} interpolation (e.g. SEARXNG_SECRET) silently
+        # falls back to blank instead of reading the seeded ./.env. See ci.yml.
+        run: docker compose --env-file ./.env -f "${{ matrix.service }}/docker-compose.yml" up -d
 
       - name: Wait for containers to settle
         run: sleep 20
@@ -52,16 +58,16 @@ jobs:
           # started and then crashed simply vanishes from the output and the check
           # passes — the exact failure this step exists to catch. See
           # docs/HARD-WON-GOTCHAS.md, "Docker operations".
-          not_running=$(docker compose -f "${{ matrix.service }}/docker-compose.yml" \
+          not_running=$(docker compose --env-file ./.env -f "${{ matrix.service }}/docker-compose.yml" \
             ps -a --format '{{.Name}} {{.State}}' | grep -v ' running$' || true)
           if [ -n "$not_running" ]; then
             echo "::error::These containers are not running:"
             echo "$not_running"
-            docker compose -f "${{ matrix.service }}/docker-compose.yml" logs
+            docker compose --env-file ./.env -f "${{ matrix.service }}/docker-compose.yml" logs
             exit 1
           fi
           echo "✅ all containers running"
 
       - name: Tear down
         if: always()
-        run: docker compose -f "${{ matrix.service }}/docker-compose.yml" down -v
+        run: docker compose --env-file ./.env -f "${{ matrix.service }}/docker-compose.yml" down -v

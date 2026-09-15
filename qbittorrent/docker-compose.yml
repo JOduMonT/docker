@@ -1,7 +1,7 @@
 ---
 services:
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: lscr.io/linuxserver/qbittorrent:5.2.3-libtorrentv1
     container_name: qbittorrent
     restart: unless-stopped
     stop_grace_period: "15s"
@@ -29,6 +29,18 @@ services:
       - TZ=${TZ:-Europe/Paris}
       - WEBUI_PORT=${WEBUI_PORT:-8080}
       - TORRENTING_PORT=${TORRENTING_PORT:-6881}
+    # s6-overlay root->PUID/PGID drop dance — same set as jellyfin/changedetection/
+    # postgres in this repo (docs/HARD-WON-GOTCHAS.md).
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test:
         - CMD
