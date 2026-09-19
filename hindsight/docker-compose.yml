@@ -1,0 +1,136 @@
+# name: hindsight
+# url: https://github.com/vectorize-io/hindsight/blob/main/docker/docker-compose/claude-code/docker-compose.yaml
+# Run Hindsight with the claude-code LLM provider, using your host machine's
+# Claude Pro/Max subscription credentials.  Linux/amd64 only for now.
+#
+#   docker compose -f docker/docker-compose/claude-code/docker-compose.yaml up -d
+
+services:
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:latest
+    container_name: hindsight
+    restart: unless-stopped
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # start-all.sh's SIGTERM trap gives pg0 up to 30s to checkpoint and flush
+    # WAL before force-killing. Docker's default 10s grace period would SIGKILL
+    # the container mid-flush, risking embedded-database corruption.
+    stop_grace_period: 30s
+    # start-all.sh backgrounds hindsight-api (which spawns the embedded pg0
+    # postgres subprocess) and the control-plane node process, tracking only
+    # their top-level PIDs. tini as real PID 1 reaps any orphaned grandchildren
+    # those two trees leave behind (docs/HARD-WON-GOTCHAS.md, "subprocess" rule).
+    init: true
+    # Runs as a fixed non-root user from the start (no root->UID privilege-drop
+    # dance in the entrypoint), so the full drop-and-restore set isn't needed —
+    # except CHOWN: Docker auto-creates /home/hindsight/.claude as root:root
+    # (only the .credentials.json file inside it is bind-mounted, not the
+    # directory), and the README's documented one-time post-setup step needs
+    # `docker exec --user 0:0 ... chown` to hand it to HOST_UID so the CLI can
+    # write session/project state into it. Confirmed live: chown fails with
+    # "Operation not permitted" under bare cap_drop: ALL, even as UID 0.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${HINDSIGHT_API_PORT:-8888}:8888"
+      - "${HINDSIGHT_UI_PORT:-9999}:9999"
+# https://hindsight.vectorize.io/developer/configuration#control-plane
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.local
+        required: false
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      HOME: /home/hindsight
+      USER: hindsight
+      LOGNAME: hindsight
+      # The Dockerfile's own ENV puts the venv first (PATH="/app/api/.venv/bin:...")
+      # so plain `python3` resolves to the venv where hindsight_api is installed.
+      # Upstream's claude-code example compose file reverses that order, which
+      # puts the base image's system python3 (no hindsight_api) ahead of it —
+      # start-all.sh's own require_http_probe_runtime() check then fails with
+      # "python3 with hindsight_api.http_probe importable" before the API ever
+      # starts. Restoring venv-first fixes it.
+      PATH: /app/api/.venv/bin:/usr/local/bin:/usr/bin:/bin
+      HINDSIGHT_API_LLM_PROVIDER: claude-code
+      HINDSIGHT_API_LLM_MODEL: claude-haiku-4-5
+      HINDSIGHT_API_RETAIN_LLM_MODEL: claude-haiku-4-5
+      HINDSIGHT_API_REFLECT_LLM_MODEL: claude-sonnet-5
+      HINDSIGHT_API_CONSOLIDATION_LLM_MODEL: claude-sonnet-5
+      HINDSIGHT_API_AUDIT_LOG_ENABLED: true
+    # The image ships no curl/wget (docker/standalone/Dockerfile installs
+    # neither in the runtime stage). Reuse the app's own stdlib-only prober
+    # instead of guessing — it's what start-all.sh uses for its own readiness
+    # wait. /health/live is the DB-independent liveness route (hindsight's
+    # own tests pin this split so a slow Postgres doesn't flip the container
+    # unhealthy); /api/health confirms the control-plane's Next server answers.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          /app/api/.venv/bin/python3 -m hindsight_api.http_probe http://127.0.0.1:8888/health/live 5 &&
+          /app/api/.venv/bin/python3 -m hindsight_api.http_probe http://127.0.0.1:9999/api/health 5
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3072M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      # ── Persistent data ────────────────────────────────────────────
+      # Named volume, not a host bind mount: Docker seeds a fresh named
+      # volume from the image's /home/hindsight/.pg0 (created at build time
+      # as the hindsight user, UID 1000), so ownership is correct on first
+      # use. A bind mount to a not-yet-existing host path is created by the
+      # Linux dockerd as root instead, which the rootless container then
+      # can't write to — hit exactly that (issue #1483) with a bind mount
+      # here before switching to this named volume.
+      - hindsight-pg0-data:/home/hindsight/.pg0
+
+      # ── Claude credentials ──────────────────────────────────────────
+      # A single-file :ro bind of .credentials.json freezes at whatever
+      # inode existed at container start: OAuth refresh writes via a
+      # temp-file-then-rename, which swaps the host's directory entry to
+      # a NEW inode the bind mount never follows. The container then
+      # keeps presenting an old access token that Anthropic has since
+      # revoked (confirmed live: container's mtime was ~7.5h stale vs
+      # host's, causing "Mental Model Refresh" jobs to fail with
+      # "OAuth access token has been revoked"). Bind-mounting the
+      # containing directory instead means lookups resolve by name
+      # against the live host directory, so renames propagate.
+      # Read-write also lets the container persist its own token
+      # refreshes and the session/project state the CLI writes at
+      # runtime — the reason a prior whole-directory attempt was :ro
+      # (and broke on that) doesn't apply once it's writable.
+      - ${HOME:-${USERPROFILE}}/.claude:/home/hindsight/.claude
+      # Copy of the host ~/.claude.json: Docker Desktop shares folders only,
+      # not single files. Refresh it after re-login on the host.
+      - ./claude.json:/home/hindsight/.claude.json:ro
+
+      # ── Claude CLI install (read-only) ─────────────────────────────
+      - ${CLAUDE_CLI_DIR:-./claude-cli}:/home/hindsight/.local/share/claude:ro
+
+      # ── SDK bundled-binary override ────────────────────────────────
+      # The claude-agent-sdk 0.5.x image bundles v2.1.121 which has a
+      # protocol incompatibility in containers.  Override it with the
+      # host's v2.1.128+ binary.  Drop this mount once claude-agent-sdk
+      # ships with v2.1.128+.
+#      - ${HOME}/.local/share/claude/versions/${CLAUDE_CLI_VERSION:-2.1.128}:/app/api/.venv/lib/python3.11/site-packages/claude_agent_sdk/_bundled/claude:ro
+
+volumes:
+  hindsight-pg0-data:
