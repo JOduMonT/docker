@@ -4,6 +4,8 @@ include:
   #  - path: ./browser/docker-compose.yml
   #  - path: ./metamcp/docker-compose.yml
   #  - path: ./kali-desktop/docker-compose.yml
-  - path: ./searxng/docker-compose.yml
-  - path: ./jellyfin/docker-compose.yml
-  - path: ./qbittorrent/docker-compose.yml
+  #  - path: ./hindsight/docker-compose.yml
+#  - path: ./searxng/docker-compose.yml
+#  - path: ./jellyfin/docker-compose.yml
+#  - path: ./qbittorrent/docker-compose.yml
+  - path: ./hindsight/docker-compose.yml

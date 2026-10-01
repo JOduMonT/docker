@@ -1,6 +1,6 @@
-# AI Coding Agent Playbook: Resilient Home-Lab Compose Stack 🤖
+# Home-Lab Compose Stack Playbook: Modular Architecture & Hardening Standards 🤖
 
-Welcome, AI Agent! This document provides the architectural blueprint, structural patterns, and strict resiliency rules governing this repository. Read this playbook thoroughly before modifying or adding services to maintain our production-grade home-lab environment.
+Welcome! This document provides the architectural blueprint, structural patterns, and strict resiliency rules governing this repository. Read this playbook thoroughly before modifying or adding services to maintain our production-grade home-lab environment.
 
 ---
 
@@ -9,7 +9,7 @@ Welcome, AI Agent! This document provides the architectural blueprint, structura
 This stack is organized as a **highly modular, decentralized multi-container deployment** utilizing the modern Docker Compose `include` directive. Instead of a single monolithic compose file, each service is fully self-contained within its own directory.
 
 ```
-/home/jond/.docker/
+<repo root>/                # C:/AIonUI/Work/docker on the current machine
 ├── docker-compose.yml       # Root orchestrator (includes active services)
 ├── .env.example             # Global environment variables blueprint
 ├── .gitignore               # Excludes sensitive data (.env, .env.local, config folders)
@@ -34,7 +34,7 @@ This stack is organized as a **highly modular, decentralized multi-container dep
     └── docker-compose.yml   # Headless Chromium automation engine
 ```
 
-The root `/home/jond/.docker/docker-compose.yml` serves as the entry point, selectively importing active service configurations:
+The root `docker-compose.yml` serves as the entry point, selectively importing active service configurations:
 ```yaml
 include:
   # - path: ./changedetection/docker-compose.yml
@@ -169,37 +169,65 @@ Create a dedicated subdirectory for the service (e.g., `./my-service`).
 
 ### Step 2: Write the `docker-compose.yml`
 Create `./my-service/docker-compose.yml`. Make sure to:
-- Use standard images (prefer verified, official, or reputable publishers like LinuxServer).
+- Use standard images (prefer verified, official, or reputable publishers like LinuxServer, Docker Official, or trusted open-source maintainers).
 - Define ports using loopback `127.0.0.1` and customizable env variables (e.g., `${MY_SERVICE_PORT:-9000}`).
 - Set up the **4-layered env_file block** pointing to `../.env`, `../.env.local`, `.env`, and `.env.local`.
-- Apply **Resource limits**, **Log rotation**, **Healthchecks**, and **init: true** (if running subprocesses).
+- Apply **Resource limits**, **Log rotation**, **Healthchecks**, **Capability hardening**, and **init: true** (if running subprocesses).
 - Use local folder mappings for config storage (e.g., `./config:/config`).
+- Never hardcode secrets; all sensitive values must come from environment variables.
 
 ### Step 3: Update Environments
-- Add the default configuration key value pairs to `/home/jond/.docker/.env.example`.
-- If the user has a local `.env`, append the new service variables to it with helpful comments.
+- Add default configuration key-value pairs to the root `.env.example` with clear comments.
+- Document all new environment variables with their purpose, defaults, and any required values.
+- Keep all host-specific paths (storage, credentials) parameterized in `.env` — never hardcode them.
 
 ### Step 4: Register in Orchestrator
-Add the service directory relative path to the root `/home/jond/.docker/docker-compose.yml` under `include:`.
+Add the service directory relative path to the root `docker-compose.yml` under `include:`. Comment it out if it should be optional.
 
 ---
 
 ## 🚦 Verification Command Playbook
 
-Before marking any task as complete, run these commands to verify syntax, config values, and deployment validity:
+Before marking any service deployment as complete, run these commands to verify syntax, configuration, and runtime health:
 
 ```bash
 # 1. Verify compose syntax and structural formatting
 docker compose config
 
-# 2. Start the services (dry-run/daemon mode)
+# 2. Start the services in daemon mode
 docker compose up -d
 
-# 3. Check health and lifecycle status
+# 3. Check health and lifecycle status of all containers
 docker compose ps
 
-# 4. View logs of specific containers to ensure error-free startups
+# 4. View logs to ensure clean startups (follow mode for real-time)
 docker compose logs -f <service-name>
+
+# 5. Inspect resource usage and container stats
+docker stats
+
+# 6. Verify healthcheck status
+docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
-Happy hacking, AI Agent! Keep the stack secure, resilient, and blazing fast. 🚀
+---
+
+## ⚠️ Common Pitfalls
+
+**Hardening mistakes:**
+- `cap_drop: ALL` without `cap_add` for root→user privilege-drop services breaks entrypoints.
+- Forgetting `init: true` on containers with subprocess spawning (Node, browser engines, scrapers) leads to zombie processes.
+- Omitting `security_opt: [no-new-privileges:true]` allows containers to re-escalate if a process is exploited.
+
+**Resource & stability issues:**
+- Missing memory limits cause OOM kills and crash-loops; always set `deploy.resources.limits.memory`.
+- Unbounded log files fill the host disk; always use `logging.options.max-size` and `max-file`.
+- No healthchecks hide crashing services; `docker compose ps` alone won't catch them without `-a`.
+- Unbuffered volumes (bind mounts to non-existent host paths) are created as root, causing permission errors in rootless containers.
+
+**Environment & secrets:**
+- Hardcoding secrets in compose files exposes them in version control; use env variables + `.gitignore`.
+- Not documenting env vars in `.env.example` makes onboarding impossible.
+- Mixing host-specific paths in compose creates non-portable configs; parameterize them.
+
+Keep the stack secure, resilient, and maintainable. 🚀

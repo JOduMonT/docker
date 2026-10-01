@@ -15,3 +15,7 @@ kali-desktop/opt/
 .DS_Store
 Thumbs.db
 *.log
+
+# Linux claude CLI copied for the hindsight container (large binary)
+hindsight/claude-cli/
+hindsight/claude.json
