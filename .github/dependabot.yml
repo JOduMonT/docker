@@ -1,0 +1,18 @@
+# Renovate owns routine version bumps in this repository, so Dependabot version updates
+# are off (limit 0) to avoid duplicate pull requests. Dependabot alerts and security
+# updates are repository settings and stay on regardless.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 0
+  - package-ecosystem: docker-compose
+    directories:
+      - "/*"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 0
