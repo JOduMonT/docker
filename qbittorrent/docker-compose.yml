@@ -1,7 +1,7 @@
 ---
 services:
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:5.2.3-libtorrentv1
+    image: lscr.io/linuxserver/qbittorrent:5.2.4-libtorrentv1
     container_name: qbittorrent
     restart: unless-stopped
     stop_grace_period: "15s"
