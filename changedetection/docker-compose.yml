@@ -1,7 +1,7 @@
 # https://github.com/linuxserver/docker-changedetection.io
 services:
   changedetection:
-    image: lscr.io/linuxserver/changedetection.io:0.60.6
+    image: lscr.io/linuxserver/changedetection.io:0.60.8
     container_name: changedetection
     restart: unless-stopped
     ports:
