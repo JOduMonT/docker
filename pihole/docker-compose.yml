@@ -1,0 +1,51 @@
+services:
+  pihole:
+    image: 'pihole/pihole:latest'
+    container_name: pihole
+    restart: unless-stopped
+    # Required for Pi-hole to bind DNS ports and manage network traffic
+    cap_add:
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      # Map DNS to localhost (Change 127.0.0.1 to your server IP if exposed to local network)
+#      - "${PIHOLE_DNS_PORT:-53}:53/tcp"
+#      - "${PIHOLE_DNS_PORT:-53}:53/udp"
+      - "${PIHOLE_HTTP_PORT:-8081}:80/tcp"
+      - "${PIHOLE_HTTPS_PORT:-443}:443/tcp"
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.local
+        required: false
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    volumes:
+      - pihole-etc:/etc/pihole
+      - pihole-dnsmasq:/etc/dnsmasq.d
+    environment:
+      FTLCONF_webserver_api_password: '${PIHOLE_PASSWORD:-ChangeMeSecretPassword}'
+      TZ: '${TZ:-America/Toronto}'
+    healthcheck:
+      test: ["CMD", "dig", "+short", "+norecurse", "@127.0.0.1", "pi.hole"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pihole-etc:
+  pihole-dnsmasq:

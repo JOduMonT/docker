@@ -1,11 +1,13 @@
 include:
-  #  - path: ./changedetection/docker-compose.yml
-  #  - path: ./flaresolverr/docker-compose.yml
-  #  - path: ./browser/docker-compose.yml
-  #  - path: ./metamcp/docker-compose.yml
-  #  - path: ./kali-desktop/docker-compose.yml
-  #  - path: ./hindsight/docker-compose.yml
+#  - path: ./changedetection/docker-compose.yml
+#  - path: ./browser/docker-compose.yml
+#  - path: ./metamcp/docker-compose.yml
+#  - path: ./kali-desktop/docker-compose.yml
+#  - path: ./hindsight/docker-compose.yml
 #  - path: ./searxng/docker-compose.yml
 #  - path: ./jellyfin/docker-compose.yml
 #  - path: ./qbittorrent/docker-compose.yml
-  - path: ./hindsight/docker-compose.yml
+#  - path: ./hindsight/docker-compose.yml
+#  - path: ./flaresolverr/docker-compose.yml
+  - path: ./prowlarr/docker-compose.yml
+#  - path: ./pihole/docker-compose.yml

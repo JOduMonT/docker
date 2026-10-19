@@ -1,6 +1,6 @@
 services:
   flaresolverr:
-    image: 'ghcr.io/flaresolverr/flaresolverr:v3.5.2'
+    image: 'ghcr.io/flaresolverr/flaresolverr:latest'
     container_name: flaresolverr
     restart: unless-stopped
     init: true
@@ -23,7 +23,7 @@ services:
       - path: .env.local
         required: false
     environment:
-      - TZ=${TZ:-Europe/Paris}
+      - TZ=${TZ:-America/Toronto}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_FILE=none
       - LOG_HTML=false
