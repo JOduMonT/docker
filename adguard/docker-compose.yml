@@ -1,0 +1,19 @@
+services:
+  adguardhome:
+    image: adguard/adguardhome:latest
+    container_name: adguardhome
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:53:53/tcp"
+      - "0.0.0.0:53:53/udp"
+      - "0.0.0.0:67:67/udp"
+      - "0.0.0.0:68:68/udp"
+      - "0.0.0.0:80:80/tcp"
+      - "0.0.0.0:3000:3000/tcp" # Initial setup wizard port
+    volumes:
+      - adguard-work:/opt/adguardhome/work
+      - adguard-conf:/opt/adguardhome/conf
+
+volumes:
+  adguard-work:
+  adguard-conf:

@@ -1,0 +1,49 @@
+services:
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: unless-stopped
+#    init: true
+    ports:
+      - "127.0.0.1:${PROWLARR_PORT:-9696}:9696"
+    volumes:
+      - prowlarr-data:/config
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.local
+        required: false
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-America/Toronto}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FILE=none
+      - LOG_HTML=false
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - '-f'
+        - 'http://127.0.0.1:9797'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  prowlarr-data:
