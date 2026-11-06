@@ -1,11 +1,11 @@
-# https://docs.searxng.org/admin/engines/settings.html
+﻿# https://docs.searxng.org/admin/engines/settings.html
 services:
   searxng:
     image: searxng/searxng:2026.9.15-ca4965040
     container_name: searxng
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${SEARXNG_PORT:-8888}:${SEARXNG_PORT:-8888}"
+      - "127.0.0.1:${SEARXNG_PORT:-8888}:8080"
     volumes:
       - ./settings.yml:/etc/searxng/settings.yml
       - ./limiter.toml:/etc/searxng/limiter.toml
@@ -20,7 +20,7 @@ services:
         required: false
     environment:
       - SEARXNG_BASE_URL=http://localhost:${SEARXNG_PORT:-8888}/
-      - SEARXNG_REDIS_URL=redis://valkey:6379/0
+      - SEARXNG_VALKEY_URL=redis://valkey:6379/0
       - SEARXNG_SECRET=${SEARXNG_SECRET}
     depends_on:
       valkey:
@@ -44,7 +44,7 @@ services:
         - wget
         - '-q'
         - '--spider'
-        - 'http://127.0.0.1:${SEARXNG_PORT:-8888}/healthz'
+        - 'http://127.0.0.1:8080/healthz'
       interval: 10s
       timeout: 5s
       retries: 3

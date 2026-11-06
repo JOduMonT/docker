@@ -2,7 +2,8 @@
 use_default_settings: true
 server:
   # secret_key is dynamically overridden by the SEARXNG_SECRET environment variable in docker-compose
-  limiter: true
+  # Off: bound to 127.0.0.1 only, and agents call the JSON API (the limiter blocks it).
+  limiter: false
   image_proxy: true
 search:
   formats:
@@ -10,5 +11,19 @@ search:
 #    - csv
     - json
 #    - rss
+engines:
+  # Extra sources for the weekly complaint scan (wiki/complaint-to-marketplace.md)
+  - name: bing
+    disabled: false
+  - name: mojeek
+    disabled: false
+  - name: startpage
+    disabled: false
+  - name: reddit
+    disabled: false
+  - name: youtube
+    disabled: false
+  - name: github
+    disabled: false
 ui:
   static_use_hash: true
