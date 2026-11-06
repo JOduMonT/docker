@@ -11,3 +11,4 @@ include:
 #  - path: ./flaresolverr/docker-compose.yml
   - path: ./prowlarr/docker-compose.yml
 #  - path: ./pihole/docker-compose.yml
+#  - path: ./keystatic/docker-compose.yml

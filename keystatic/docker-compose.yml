@@ -1,0 +1,71 @@
+# Keystatic: visual editor for the JOduMonT Astro site (github.com/JOduMonT/astro).
+# Runs `astro dev` in a container with the site repo bind-mounted; open http://127.0.0.1:${KEYSTATIC_PORT}/keystatic.
+# Saves write the Markdown files in the mounted repo; publish through the usual Git PR.
+# node_modules lives in a named volume: the host's Windows binaries (esbuild, rolldown, workerd) can't run on Linux.
+# Debian image, not Alpine: wrangler's workerd needs glibc.
+services:
+  keystatic:
+    image: 'node:24.11.1-bookworm-slim'
+    container_name: keystatic
+    restart: unless-stopped
+    init: true
+    # Runs as root so it can write the fresh (root-owned) node_modules volume, but with every capability dropped.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    working_dir: /app
+    # Reinstall dependencies only when package-lock.json changes, then start the dev server.
+    command:
+      - sh
+      - '-c'
+      - |
+        set -e
+        hash=$$(sha256sum package-lock.json | cut -d' ' -f1)
+        if [ "$$(cat node_modules/.lockhash 2>/dev/null)" != "$$hash" ]; then
+          npm ci --no-audit --no-fund && echo "$$hash" > node_modules/.lockhash
+        fi
+        exec npx astro dev --host 0.0.0.0 --port 4321
+    ports:
+      - "127.0.0.1:${KEYSTATIC_PORT:-4330}:4321"
+    volumes:
+      - '${ASTRO_REPO_PATH:-C:/Users/Jonathan Dumont/OpenBot/Shared/astro-editor}:/app'
+      - keystatic_node_modules:/app/node_modules
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.local
+        required: false
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      - TZ=${TZ:-America/Toronto}
+      - ASTRO_TELEMETRY_DISABLED=1
+      # Windows bind mounts don't deliver file-change events to Linux; poll so edits made on the host hot-reload.
+      - CHOKIDAR_USEPOLLING=true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - '-e'
+        - "fetch('http://127.0.0.1:4321/keystatic').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # First start runs npm ci.
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  keystatic_node_modules:
