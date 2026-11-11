@@ -1,6 +1,6 @@
 """Apply one migration file to the local Supabase database, inside one transaction.
 
-Usage (from the supabase folder):  python migrations/apply.py migrations/003_pipeline_content.sql
+Usage (from the supabase folder):  python migrations/apply.py [--as supabase_admin] [--db <database>] migrations/003_pipeline_content.sql
 
 Runs `psql` inside the supabase-db container as postgres, with ON_ERROR_STOP
 and --single-transaction, so a failing file changes nothing. Secrets the file
@@ -29,9 +29,20 @@ def env_value(key: str) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    user = "postgres"
+    if args[:1] == ["--as"]:
+        user, args = args[1], args[2:]
+        if user not in ("postgres", "supabase_admin"):
+            raise SystemExit("--as must be postgres or supabase_admin")
+    db = "postgres"
+    if args[:1] == ["--db"]:
+        db, args = args[1], args[2:]
+        if not db.replace("_", "").isalnum():
+            raise SystemExit("--db must be a plain database name")
+    if len(args) != 1:
         raise SystemExit(__doc__)
-    sql = Path(sys.argv[1]).read_text(encoding="utf-8")
+    sql = Path(args[0]).read_text(encoding="utf-8")
     pre = []
     for var, key in VARS.items():
         if re.search(rf":'{var}'", sql):
@@ -41,7 +52,7 @@ def main() -> int:
             pre.append(f"\\set {var} '{val}'")
     script = "\n".join(pre + [sql]) + "\n"
     r = subprocess.run(
-        ["docker", "exec", "-i", "supabase-db", "psql", "-U", "postgres", "-d", "postgres",
+        ["docker", "exec", "-i", "supabase-db", "psql", "-U", user, "-d", db,
          "-v", "ON_ERROR_STOP=1", "--single-transaction", "-q", "-f", "-"],
         input=script.encode("utf-8"), capture_output=True)
     out = (r.stdout + r.stderr).decode("utf-8", "replace")
@@ -51,7 +62,7 @@ def main() -> int:
         except SystemExit:
             pass
     print(out.strip() or "(no output)")
-    print(f"{Path(sys.argv[1]).name}: {'applied' if r.returncode == 0 else 'FAILED, rolled back'}")
+    print(f"{Path(args[0]).name} as {user} on {db}: {'applied' if r.returncode == 0 else 'FAILED, rolled back'}")
     return r.returncode
 
 

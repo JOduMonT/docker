@@ -16,6 +16,7 @@
 -- paraphrase-multilingual-MiniLM-L12-v2, 384 dimensions, computed locally
 -- (fastembed, ONNX) by pipeline_db.py; NULL until computed.
 
+create schema if not exists extensions;
 create extension if not exists vector with schema extensions;
 
 create schema if not exists pipeline;
@@ -37,23 +38,24 @@ declare
   m text[];
 begin
   p := replace(p, '%2f', '/');
-  m := regexp_match(p, 'urn:li:(activity|share|ugcpost):(\d{10,25})');
-  if m is not null then return m[1] || ':' || m[2]; end if;
-  m := regexp_match(p, '/posts/[^/]*[_-](activity|share|ugcpost)-(\d{10,25})');
+  p := regexp_replace(regexp_replace(p, '/{2,}', '/', 'g'), '/(\./)+', '/', 'g');
+  m := regexp_match(p, '^[^/]+(/embed)?/feed/update/urn:li:(activity|share|ugcpost):(\d{10,25})/?$');
+  if m is not null then return m[2] || ':' || m[3]; end if;
+  m := regexp_match(p, '^[^/]+/posts/[^/]*[_-](activity|share|ugcpost)-(\d{10,25})');
   if m is not null then return m[1] || ':' || m[2]; end if;
   p := regexp_replace(p, '^www\.', '');
-  p := regexp_replace(regexp_replace(p, '/{2,}', '/', 'g'), '/(\./)+', '/', 'g');
   return rtrim(p, '/');
 end $$;
 
--- Shown link: https, lowercase host, no query, fragment or trailing slash.
+-- Shown link: scheme kept (the column checks reject anything but https), lowercase
+-- host, no query, fragment or trailing slash.
 create or replace function content.clean_link(link text) returns text
   language plpgsql immutable as $$
 declare
   m text[] := regexp_match(split_part(split_part(trim(link), '#', 1), '?', 1), '^(https?)://([^/]+)(.*)$');
 begin
   if m is null then return trim(link); end if;          -- the column check rejects it
-  return rtrim('https://' || lower(m[2]) || m[3], '/');
+  return rtrim(lower(m[1]) || '://' || lower(m[2]) || m[3], '/');
 end $$;
 
 -- --------------------------------------------------------------- pipeline
@@ -217,6 +219,12 @@ create trigger story_use_check_ref before insert on content.story_use
   for each row execute function content.story_use_check_ref();
 
 -- True when two row images differ at most in embedding/fts/updated_at.
+-- Who made a change: the agent name pipeline_db.py sets for the session
+-- (set_config('pipeline.agent', …)), then the database role.
+create or replace function content.actor() returns text language sql stable as $$
+  select coalesce(nullif(current_setting('pipeline.agent', true), '') || ' (' || session_user || ')', session_user::text)
+$$;
+
 create or replace function content.same_but_embedding(a jsonb, b jsonb) returns boolean
   language sql immutable as $$
   select (a - 'embedding' - 'fts' - 'updated_at') = (b - 'embedding' - 'fts' - 'updated_at')
@@ -259,7 +267,8 @@ create table if not exists content.engagement_events (
 create or replace function content.engagement_before() returns trigger language plpgsql as $$
 begin
   if tg_op = 'UPDATE' and content.same_but_embedding(to_jsonb(new), to_jsonb(old)) then
-    return new;                       -- only the embedding was filled in
+    new.updated_at := old.updated_at; -- only the embedding was filled in; no forged timestamps
+    return new;
   end if;
   new.link := content.clean_link(new.link);
   new.engagement_id := 'e-' || left(encode(sha256(convert_to(content.link_key(new.link), 'UTF8')), 'hex'), 12);
@@ -285,7 +294,7 @@ begin
     return new;
   end if;
   insert into content.engagement_events (engagement_id, op, changed_by, snapshot)
-  values (new.engagement_id, lower(tg_op), session_user, to_jsonb(new) - 'embedding' - 'fts');
+  values (new.engagement_id, lower(tg_op), content.actor(), to_jsonb(new) - 'embedding' - 'fts');
   return new;
 end $$;
 
@@ -328,12 +337,21 @@ create table if not exists content.posts (
   embedding    extensions.vector(384),
   constraint approved_needs_approved_at
     check (status not in ('approved','posted','verified') or approved_at is not null),
+  constraint approved_needs_approval_ref
+    check (status not in ('approved','posted','verified') or coalesce(trim(approval_ref), '') <> ''),
   constraint posted_needs_posted_at
     check (status not in ('posted','verified') or posted_at is not null),
   constraint posted_not_before_approved
     check (posted_at is null or approved_at is null or posted_at::date >= approved_at::date)
 );
 create index if not exists posts_calendar on content.posts (planned_date, post_id);
+do $$ begin   -- existing tables (003 re-run): add the constraint added after first apply
+  if not exists (select 1 from pg_constraint where conname = 'approved_needs_approval_ref'
+                 and conrelid = 'content.posts'::regclass) then
+    alter table content.posts add constraint approved_needs_approval_ref
+      check (status not in ('approved','posted','verified') or coalesce(trim(approval_ref), '') <> '');
+  end if;
+end $$;
 
 create table if not exists content.post_events (
   id         bigint generated always as identity primary key,
@@ -353,9 +371,38 @@ $$;
 create or replace function content.posts_before() returns trigger language plpgsql as $$
 begin
   if tg_op = 'UPDATE' and content.same_but_embedding(to_jsonb(new), to_jsonb(old)) then
-    return new;                       -- only the embedding was filled in
+    new.updated_at := old.updated_at; -- only the embedding was filled in; no forged timestamps
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    if new.status <> 'drafted' or new.approved_at is not null or new.approval_ref is not null
+       or new.posted_at is not null or new.link is not null then
+      raise exception 'a post starts as drafted with no approval, posted_at or link; record each step with an update';
+    end if;
+    new.created_at := now();
   end if;
   if tg_op = 'UPDATE' then
+    if new.created_at is distinct from old.created_at then
+      raise exception 'created_at never changes';
+    end if;
+    if old.status <> 'drafted' and (
+         new.text is distinct from old.text or new.asset is distinct from old.asset
+      or new.alt_text is distinct from old.alt_text or new.platform is distinct from old.platform
+      or new.format is distinct from old.format or new.campaign is distinct from old.campaign
+      or new.offer is distinct from old.offer or new.narrative is distinct from old.narrative) then
+      raise exception 'post % is %: its content is frozen (Jon approved this exact text); create a new post instead',
+        old.post_id, old.status;
+    end if;
+    if new.link is distinct from old.link and (old.link is not null or new.status not in ('posted','verified')) then
+      raise exception 'link is set once, when the post is marked posted';
+    end if;
+    if old.approved_at is null and new.approved_at is not null
+       and (new.approved_at < date_trunc('day', old.created_at) or new.approved_at > now() + interval '5 minutes') then
+      raise exception 'approved_at must be between the post''s creation and now';
+    end if;
+    if old.posted_at is null and new.posted_at is not null and new.posted_at > now() + interval '5 minutes' then
+      raise exception 'posted_at cannot be in the future';
+    end if;
     if new.post_id <> old.post_id then
       raise exception 'post_id never changes (insert a new post instead)';
     end if;
@@ -391,7 +438,7 @@ begin
   end if;
   insert into content.post_events (post_id, op, old_status, new_status, changed_by, snapshot)
   values (new.post_id, lower(tg_op), case when tg_op = 'UPDATE' then old.status end, new.status,
-          session_user, to_jsonb(new) - 'embedding' - 'fts');
+          content.actor(), to_jsonb(new) - 'embedding' - 'fts');
   return new;
 end $$;
 
