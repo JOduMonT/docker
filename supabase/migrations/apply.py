@@ -1,6 +1,6 @@
 """Apply one migration file to the local Supabase database, inside one transaction.
 
-Usage (from the supabase folder):  python migrations/apply.py [--as supabase_admin] [--db <database>] migrations/003_pipeline_content.sql
+Usage (from the supabase folder):  python migrations/apply.py [--as supabase_admin] [--db <database>] [--force-password] migrations/003_pipeline_content.sql
 
 Runs `psql` inside the supabase-db container as postgres, with ON_ERROR_STOP
 and --single-transaction, so a failing file changes nothing. Secrets the file
@@ -46,6 +46,8 @@ def env_value(key: str) -> str:
 
 def main() -> int:
     args = sys.argv[1:]
+    force_password = "--force-password" in args
+    args = [a for a in args if a != "--force-password"]
     user = "postgres"
     if args[:1] == ["--as"]:
         user, args = args[1], args[2:]
@@ -67,7 +69,7 @@ def main() -> int:
                 raise SystemExit(f"{key} must be 24+ chars of [A-Za-z0-9_-]")
             pre.append(f"\\set {var} '{val}'")
             # only (re)set a password that does not already work (see 004)
-            pre.append(f"\\set set_{var} {'false' if login_works(ROLES[var], val) else 'true'}")
+            pre.append(f"\\set set_{var} {'true' if force_password or not login_works(ROLES[var], val) else 'false'}")
     script = "\n".join(pre + [sql]) + "\n"
     r = subprocess.run(
         ["docker", "exec", "-i", "supabase-db", "psql", "-U", user, "-d", db,

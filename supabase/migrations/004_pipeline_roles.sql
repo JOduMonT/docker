@@ -17,6 +17,9 @@ end $$;
 -- Passwords are (re)set only when apply.py could not log in with the .env value:
 -- re-setting an unchanged password gives it a new hash, and the pooler then
 -- rejects the next login of every agent once (stale cached credentials).
+-- The check goes through the pooler, whose cache can still accept a password the
+-- database no longer has (e.g. after a direct ALTER ROLE ... PASSWORD). After any
+-- direct password change, re-apply with --force-password to set the .env value again.
 \if :set_pipeline_agent_password
 alter role pipeline_agent password :'pipeline_agent_password';
 \endif
