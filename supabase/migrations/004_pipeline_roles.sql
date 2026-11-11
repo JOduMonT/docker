@@ -14,8 +14,17 @@ do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'dashboard_ro')   then create role dashboard_ro login;   end if;
 end $$;
 
-alter role pipeline_agent password :'pipeline_agent_password' connection limit 20;
-alter role dashboard_ro   password :'dashboard_ro_password'   connection limit 10;
+-- Passwords are (re)set only when apply.py could not log in with the .env value:
+-- re-setting an unchanged password gives it a new hash, and the pooler then
+-- rejects the next login of every agent once (stale cached credentials).
+\if :set_pipeline_agent_password
+alter role pipeline_agent password :'pipeline_agent_password';
+\endif
+\if :set_dashboard_ro_password
+alter role dashboard_ro password :'dashboard_ro_password';
+\endif
+alter role pipeline_agent connection limit 20;
+alter role dashboard_ro   connection limit 10;
 alter role dashboard_ro set default_transaction_read_only = on;
 alter role pipeline_agent set search_path = pipeline, content, extensions, public;
 alter role dashboard_ro   set search_path = pipeline, content, extensions, public;

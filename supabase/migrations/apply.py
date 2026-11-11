@@ -18,6 +18,22 @@ HERE = Path(__file__).resolve().parent
 ENV = HERE.parent / ".env"
 VARS = {"pipeline_agent_password": "PIPELINE_AGENT_PASSWORD",
         "dashboard_ro_password": "DASHBOARD_RO_PASSWORD"}
+ROLES = {"pipeline_agent_password": "pipeline_agent", "dashboard_ro_password": "dashboard_ro"}
+
+
+def login_works(role: str, password: str) -> bool:
+    """True when the role already logs in through the pooler with this password."""
+    try:
+        import psycopg
+    except ImportError:
+        return False
+    try:
+        psycopg.connect(host="127.0.0.1", port=int(env_value("POSTGRES_PORT")), dbname="postgres",
+                        user=f"{role}.{env_value('POOLER_TENANT_ID')}", password=password,
+                        connect_timeout=5).close()
+        return True
+    except Exception:  # noqa: BLE001 - any failure means "set it"
+        return False
 
 
 def env_value(key: str) -> str:
@@ -50,6 +66,8 @@ def main() -> int:
             if not re.fullmatch(r"[A-Za-z0-9_-]{24,}", val):
                 raise SystemExit(f"{key} must be 24+ chars of [A-Za-z0-9_-]")
             pre.append(f"\\set {var} '{val}'")
+            # only (re)set a password that does not already work (see 004)
+            pre.append(f"\\set set_{var} {'false' if login_works(ROLES[var], val) else 'true'}")
     script = "\n".join(pre + [sql]) + "\n"
     r = subprocess.run(
         ["docker", "exec", "-i", "supabase-db", "psql", "-U", user, "-d", db,
