@@ -221,8 +221,15 @@ create trigger story_use_check_ref before insert on content.story_use
 -- True when two row images differ at most in embedding/fts/updated_at.
 -- Who made a change: the agent name pipeline_db.py sets for the session
 -- (set_config('pipeline.agent', …)), then the database role.
+-- It is a label the caller sets, not an identity: never proof of approval.
+-- Names of people (the operator) are shown as a claim.
 create or replace function content.actor() returns text language sql stable as $$
-  select coalesce(nullif(current_setting('pipeline.agent', true), '') || ' (' || session_user || ')', session_user::text)
+  select case
+    when nullif(trim(current_setting('pipeline.agent', true)), '') is null then session_user::text
+    when lower(trim(current_setting('pipeline.agent', true))) ~ '^(jon|jonathan|jonathan dumont|jodumont|operator|owner|client0)$'
+      then 'claimed "' || trim(current_setting('pipeline.agent', true)) || '" (' || session_user || ')'
+    else trim(current_setting('pipeline.agent', true)) || ' (' || session_user || ')'
+  end
 $$;
 
 create or replace function content.same_but_embedding(a jsonb, b jsonb) returns boolean

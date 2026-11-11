@@ -10,7 +10,11 @@
 -- ran here: http_get/http_post SECURITY DEFINER with a pinned search_path,
 -- revoked from PUBLIC, granted to Supabase's own roles only. Idempotent; a
 -- database without pg_net (e.g. the test database) is left alone.
--- Re-run after any pg_net upgrade, and check with the query at the end.
+-- A PUBLIC grant reaches every role, whatever is revoked from a named role,
+-- so an `ALTER EXTENSION pg_net UPDATE` or a Supabase upgrade that re-grants
+-- PUBLIC reopens the path. After every Supabase or pg_net upgrade: re-run this
+-- file and the check query at the end (or tools test_roles_cannot_reach_pg_net).
+-- See migrations/README.md.
 
 do $$
 declare r text;
@@ -36,7 +40,8 @@ begin
           'net.http_post(text, jsonb, jsonb, jsonb, integer) '
           'to supabase_functions_admin, postgres, anon, authenticated, service_role';
 
-  -- Our roles never get it, even if a later grant to PUBLIC reappears.
+  -- Belt and braces only: these revokes drop direct grants to our roles; they do
+  -- NOT block a future grant to PUBLIC (see the header).
   foreach r in array array['pipeline_agent', 'dashboard_ro', 'ops_app'] loop
     if exists (select 1 from pg_roles where rolname = r) then
       execute format('revoke all on schema net from %I', r);
