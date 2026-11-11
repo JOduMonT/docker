@@ -7,6 +7,8 @@ python migrations/apply.py migrations/001_ops_tasks.sql
 python migrations/apply.py migrations/003_pipeline_content.sql
 python migrations/apply.py migrations/004_pipeline_roles.sql        # passwords from .env (PIPELINE_AGENT_PASSWORD, DASHBOARD_RO_PASSWORD)
 python migrations/apply.py --as supabase_admin migrations/005_revoke_pg_net_public.sql
+python migrations/apply.py migrations/006_yes_decks.sql                # schema only; then load the private data:
+python ../../product-pipeline/tools/pipeline_db.py load-yes-decks      # from Shared/Data/yes-decks/merged.json (paid content, never in git)
 ```
 
 `002_ops_app_role.sql.local` is git-ignored (it holds a password). Every file
