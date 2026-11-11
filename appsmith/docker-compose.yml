@@ -1,0 +1,21 @@
+# Appsmith CE - internal ops panel on top of local Supabase Postgres.
+# No Alpine/DHI variant exists for Appsmith; CE is the free open-source edition.
+# Secrets live in ./.env.local (gitignored). Data in ./stacks (gitignored).
+services:
+  appsmith:
+    image: appsmith/appsmith-ce:latest
+    container_name: appsmith
+    ports:
+      - "127.0.0.1:3000:80"
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.local
+        required: false
+      - path: .env.local
+        required: false
+    volumes:
+      - ./stacks:/appsmith-stacks
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

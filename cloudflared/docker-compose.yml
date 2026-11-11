@@ -1,0 +1,14 @@
+# Cloudflare Tunnel "k12-appsmith-viewer": dev.jdmnt.co -> Appsmith on k12 (host port 3000).
+# Ingress is managed in Cloudflare; protected by Cloudflare Access (email login).
+# Token in ./.env.local (TUNNEL_TOKEN, gitignored).
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-appsmith
+    command: tunnel --no-autoupdate run
+    env_file:
+      - path: .env.local
+        required: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
