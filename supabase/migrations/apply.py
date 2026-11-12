@@ -17,8 +17,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ENV = HERE.parent / ".env"
 VARS = {"pipeline_agent_password": "PIPELINE_AGENT_PASSWORD",
-        "dashboard_ro_password": "DASHBOARD_RO_PASSWORD"}
-ROLES = {"pipeline_agent_password": "pipeline_agent", "dashboard_ro_password": "dashboard_ro"}
+        "dashboard_ro_password": "DASHBOARD_RO_PASSWORD",
+        "nocodb_ro_password": "NOCODB_RO_PASSWORD"}
+ROLES = {"pipeline_agent_password": "pipeline_agent", "dashboard_ro_password": "dashboard_ro",
+         "nocodb_ro_password": "nocodb_ro"}
+# Secrets that live in another stack's .env (kept in one place only).
+ENV_FILES = {"NOCODB_RO_PASSWORD": HERE.parent.parent / "nocodb" / ".env"}
 
 
 def login_works(role: str, password: str) -> bool:
@@ -37,11 +41,12 @@ def login_works(role: str, password: str) -> bool:
 
 
 def env_value(key: str) -> str:
-    for line in ENV.read_text(encoding="utf-8").splitlines():
+    path = ENV_FILES.get(key, ENV)
+    for line in path.read_text(encoding="utf-8").splitlines():
         m = re.match(rf"^{key}=(.*)$", line.strip())
         if m:
             return m.group(1).strip().strip('"').strip("'")
-    raise SystemExit(f"{key} is missing from {ENV}")
+    raise SystemExit(f"{key} is missing from {path}")
 
 
 def main() -> int:
