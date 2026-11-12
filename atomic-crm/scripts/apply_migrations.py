@@ -14,6 +14,7 @@ Usage (from Shared\\docker\\atomic-crm):
   and re-applies 005 (pg_net closed to PUBLIC) as supabase_admin.
 """
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,22 @@ PATCHES = {
         "never drop/recreate the shared pg_net"),
     ],
 }
+
+# A pending upstream file that matches any of these is refused until a person has
+# read it and passes --allow <file> (shared database: our schemas, pg_net, extensions).
+FORBIDDEN = [
+    (r"\bdrop\s+extension\b", "drops an extension"),
+    (r"\balter\s+extension\b", "alters an extension"),
+    (r"\b(pipeline|content|reference|ops|net|supabase_functions|vault)\s*\.\s*\w", "touches a schema that is not the CRM's"),
+    (r"\bto\s+public\b(?!\s*\.)", "grants to PUBLIC"),
+    (r"\b(create|alter|drop)\s+(role|user)\b", "manages roles"),
+    (r"\bcreate\s+(or\s+replace\s+)?function\s+\"?extensions\"?\.", "defines functions in extensions"),
+]
+
+
+def guard(f: Path, sql: str) -> list[str]:
+    return [why for rx, why in FORBIDDEN if re.search(rx, sql, re.I)]
+
 
 TRACK = """create schema if not exists supabase_migrations;
 create table if not exists supabase_migrations.schema_migrations (
@@ -72,6 +89,7 @@ def record(f: Path) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--allow", action="append", default=[], help="file name reviewed by a person despite the guard")
     a = ap.parse_args()
     r = psql(TRACK)
     if r.returncode:
@@ -79,6 +97,12 @@ def main() -> int:
     done = applied()
     files = sorted(p for p in MIG.glob("*.sql") if p.stem.split("_")[0] not in done)
     print(f"{len(done)} already applied, {len(files)} pending")
+    blocked = {f.name: guard(f, body(f)) for f in files if f.name not in a.allow}
+    blocked = {k: v for k, v in blocked.items() if v}
+    if blocked:
+        for k, v in blocked.items():
+            print(f"REFUSED {k}: {', '.join(v)}. Read it, patch it in PATCHES if needed, then pass --allow {k}")
+        return 2
     hardening = (SUPA / "migrations" / "007_atomic_crm_hardening.sql").read_text(encoding="utf-8")
     if a.dry_run:
         # CRM part as postgres (owner of its objects), hardening as supabase_admin

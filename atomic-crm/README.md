@@ -40,12 +40,17 @@ key is in the image (checked).
 
 ## What it added to Supabase
 
-Backup taken first: `supabase\backups\pre-atomic-crm-20261112-052845.dump`
-(+ `.globals.sql`, git-ignored). Restore = `pg_restore` of that file.
+Backup taken first, kept outside OpenBot's shared folders because it holds auth
+users, role password hashes and paid reference data:
+`C:\Users\Jonathan Dumont\Backups\supabase\pre-atomic-crm-20261112-052845.dump`
+(+ `.globals.sql`). Restore = `pg_restore` of that file. Delete it when the trial ends.
 
 Applied with `python scripts/apply_migrations.py` (use `--dry-run` first: every
 pending file in one transaction, rolled back). 33 upstream migrations,
 recorded in `supabase_migrations.schema_migrations` (the Supabase CLI table).
+A pending upstream file that drops or alters an extension, touches
+pipeline/content/reference/ops/net/vault, grants to PUBLIC or manages roles is
+refused until a person reads it and passes `--allow <file>`.
 
 - Schema `public` (was empty) now belongs to the CRM: tables `companies`,
   `configuration`, `contact_notes`, `contacts`, `deal_notes`, `deals`,
@@ -73,6 +78,17 @@ recorded in `supabase_migrations.schema_migrations` (the Supabase CLI table).
   `get_user_id_by_email`, are re-stated); `pipeline_agent`, `dashboard_ro`
   and `ops_app` get nothing in `public`/`private`. Then 005 is re-applied.
 
+## Before anything beyond localhost (Momus review, 2026-11-12)
+
+- The `attachments` bucket is **public**: anyone who can reach the Supabase API
+  (today: local processes only) can read a file by its URL without signing in.
+  The app links files with `getPublicUrl`, so making it private needs an app
+  change to signed URLs. Uploads are capped at 10 MB (007).
+- Every signed-in CRM user can read, edit and delete every CRM record (upstream
+  policies `using (true)`). Fine for Jon alone; review before adding a second user.
+- 007 pins the attachment-cleanup URL to `host.docker.internal:54321` (upstream
+  builds it from the token's issuer).
+
 ## Not set up (on purpose, trial scope)
 
 - **Edge functions** (`users`, `update_password`, `merge_contacts`,
@@ -83,10 +99,10 @@ recorded in `supabase_migrations.schema_migrations` (the Supabase CLI table).
   the shared Supabase functions volume (a shared-config change: review first).
 - **Email**: none. The admin was created with the email already confirmed;
   the stack has no mail container. "Forgot password" will not send anything.
-- **Open sign-up**: the shared Supabase has `DISABLE_SIGNUP=false`, so anyone
-  on this machine could register a CRM user through the API (localhost only).
-  Setting `DISABLE_SIGNUP=true` in `supabase\.env` closes it (shared config:
-  Momus reviews).
+- **Sign-up**: the shared Supabase has `DISABLE_SIGNUP=false`, but the CRM's
+  own trigger refuses any sign-up after the first user unless invited or SSO
+  (checked by Momus). `DISABLE_SIGNUP=true` would also close it at the gateway
+  (shared config: review first).
 - **Outbound lookups**: when a contact or company is saved, the CRM may call
   gravatar.com (with a hash of the email) and favicon.show (with the domain)
   from inside Postgres.

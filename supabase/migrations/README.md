@@ -24,7 +24,11 @@ key). So after each upgrade:
 
 ```bash
 python migrations/apply.py --as supabase_admin migrations/005_revoke_pg_net_public.sql
-docker exec supabase-db psql -U supabase_admin -tAc "select r, has_schema_privilege(r,'net','USAGE') from unnest(array['pipeline_agent','dashboard_ro','ops_app']) r"
+python migrations/apply.py --as supabase_admin migrations/007_atomic_crm_hardening.sql   # http extension + CRM functions
+docker exec supabase-db psql -U supabase_admin -tAc "select r, has_schema_privilege(r,'net','USAGE'), has_function_privilege(r,'extensions.http_post(character varying,character varying,character varying)','EXECUTE') from unnest(array['pipeline_agent','dashboard_ro','ops_app','anon']) r"
 ```
 
-Every line must end in `f`. `update.sh` prints this reminder.
+Every value after the role name must be `f`. The same applies after any
+`ALTER EXTENSION http UPDATE`; a new Atomic CRM migration run through
+`atomic-crm/scripts/apply_migrations.py` re-applies 007 and 005 itself.
+`update.sh` prints this reminder.

@@ -54,3 +54,20 @@ begin
     end if;
   end loop;
 end $$;
+
+-- 3. Attachments: a size limit (the bucket stays public because the app links
+--    files with getPublicUrl; make it private before any tunnel, see README).
+update storage.buckets set file_size_limit = 10485760   -- 10 MB
+ where id = 'attachments' and file_size_limit is distinct from 10485760;
+
+-- 4. Pin the URL the attachment-cleanup trigger posts to. Upstream derives it
+--    from the JWT `iss`; with a leaked signing secret that becomes a request to
+--    any host carrying the user's bearer token.
+do $$ begin
+  if to_regprocedure('public.get_note_attachments_function_url()') is not null then
+    create or replace function public.get_note_attachments_function_url() returns text
+      language sql immutable set search_path = '' as
+      $f$ select 'http://host.docker.internal:54321/functions/v1/delete_note_attachments'::text $f$;
+    revoke execute on function public.get_note_attachments_function_url() from public, anon;
+  end if;
+end $$;
