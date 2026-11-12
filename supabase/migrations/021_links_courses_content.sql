@@ -6,7 +6,8 @@
 --   2. courses.notes / courses.references .course_id -> courses.catalog(legacy_id) (values already match).
 --   3. courses.rehearsal_runs.course_id -> catalog, filled from the course title.
 --   4. content.campaigns (new): one row per posts.campaign, optionally linked to a course and a narrative;
---      content.posts.campaign -> campaigns (unknown campaign auto-created), posts.narrative_id -> narratives.
+--      content.posts.campaign -> campaigns (any non-null campaign auto-created), posts.narrative_id -> narratives:
+--      from the narrative path; only when the path is NULL, from narratives.offer = campaign; else NULL.
 
 -- 1. MoSCoW bucket for books ---------------------------------------------------------------
 do $$ begin
@@ -27,17 +28,23 @@ alter table books.triage add column if not exists moscow_bucket books.moscow_buc
 grant usage on type books.moscow_bucket to pipeline_agent, nocodb_ro;
 
 -- 2. Course notes and references -> catalog --------------------------------------------------
-alter table courses.catalog add constraint catalog_legacy_id_key unique using index catalog_legacy_id_uniq;
-alter table courses.notes add constraint notes_course_fk
-  foreign key (course_id) references courses.catalog (legacy_id);
-alter table courses."references" add constraint references_course_fk
-  foreign key (course_id) references courses.catalog (legacy_id);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'catalog_legacy_id_uniq' and conrelid = 'courses.catalog'::regclass) then
+    alter table courses.catalog add constraint catalog_legacy_id_uniq unique using index catalog_legacy_id_uniq;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'notes_course_fk') then
+    alter table courses.notes add constraint notes_course_fk foreign key (course_id) references courses.catalog (legacy_id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'references_course_fk') then
+    alter table courses."references" add constraint references_course_fk foreign key (course_id) references courses.catalog (legacy_id);
+  end if;
+end $$;
 
 -- 3. Rehearsal runs -> catalog (course title stays; course_id filled when the title matches) --
 alter table courses.rehearsal_runs add column if not exists course_id text
   references courses.catalog (legacy_id);
 create or replace function courses.rehearsal_runs_link() returns trigger
-  language plpgsql security definer set search_path = courses, pg_temp as $$
+  language plpgsql set search_path = courses, pg_temp as $$
 begin
   if new.course_id is null then
     select legacy_id into new.course_id from courses.catalog
@@ -81,7 +88,7 @@ alter table content.posts add column if not exists narrative_id text references 
 
 -- Fills the links on every insert/update; never raises for an unknown value.
 create or replace function content.posts_links() returns trigger
-  language plpgsql security definer set search_path = content, pg_temp as $$
+  language plpgsql set search_path = content, pg_temp as $$
 begin
   if new.campaign is not null then
     insert into content.campaigns (campaign_id, name)
@@ -101,14 +108,31 @@ create trigger posts_links before insert or update of campaign, narrative, narra
   for each row execute function content.posts_links();
 
 -- FK on the existing free-text campaign column: the trigger above creates every non-null value first.
-alter table content.posts add constraint posts_campaign_fk
-  foreign key (campaign) references content.campaigns (campaign_id);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'posts_campaign_fk') then
+    alter table content.posts add constraint posts_campaign_fk foreign key (campaign) references content.campaigns (campaign_id);
+  end if;
+end $$;
 
--- Backfill narrative_id on existing posts without firing the frozen-content and history triggers:
--- this is a schema backfill, not an edit of an approved post (no post_events row, updated_at kept).
-alter table content.posts disable trigger posts_before, disable trigger posts_log;
+-- Backfill narrative_id with a normal update: today it touches only the 4 drafted w1a-* posts
+-- (the swarm-* posts have no narrative), and posts_log records each new link as honest history.
 update content.posts p set narrative_id = n.narrative_id
   from content.narratives n
   where p.narrative_id is null
     and (n.source_path = p.narrative or (p.narrative is null and n.offer = p.campaign));
-alter table content.posts enable trigger posts_before, enable trigger posts_log;
+
+-- Freeze the new link like the other content columns once a post leaves 'drafted'.
+do $$
+declare d text;
+begin
+  d := pg_get_functiondef('content.posts_before'::regproc);
+  if position('new.narrative_id is distinct from old.narrative_id' in d) = 0 then
+    d := replace(d, 'or new.offer is distinct from old.offer or new.narrative is distinct from old.narrative)',
+                    'or new.offer is distinct from old.offer or new.narrative is distinct from old.narrative'
+                    || ' or new.narrative_id is distinct from old.narrative_id)');
+    if position('new.narrative_id is distinct from old.narrative_id' in d) = 0 then
+      raise exception 'posts_before: frozen list not found, narrative_id not added';
+    end if;
+    execute d;
+  end if;
+end $$;
