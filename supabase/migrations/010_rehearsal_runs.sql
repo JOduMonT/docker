@@ -17,6 +17,19 @@ create table if not exists courses.rehearsal_runs (
   constraint rehearsal_runs_course_run_uniq unique (course, run_number)
 );
 
+-- Row-level security, matching the pattern on pipeline.tasks/ops.tasks.
+alter table courses.rehearsal_runs enable row level security;
+drop policy if exists pipeline_agent_write on courses.rehearsal_runs;
+create policy pipeline_agent_write on courses.rehearsal_runs
+  for all to pipeline_agent using (true) with check (true);
+drop policy if exists nocodb_ro_read on courses.rehearsal_runs;
+create policy nocodb_ro_read on courses.rehearsal_runs
+  for select to nocodb_ro using (true);
+
 -- Jon sees it in NocoDB through the read-only role (explicit grants, no default privileges).
 grant usage on schema courses to nocodb_ro;
 grant select on courses.rehearsal_runs to nocodb_ro;
+
+-- Chiron logs runs through the agent write role (append-only: no DELETE).
+grant usage on schema courses to pipeline_agent;
+grant select, insert, update on courses.rehearsal_runs to pipeline_agent;
