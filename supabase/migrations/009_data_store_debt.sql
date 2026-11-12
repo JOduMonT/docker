@@ -51,7 +51,18 @@ insert into ops.data_store_debt (path, file_type, owner_agent, purpose, row_coun
   ('Shared/kobo-panel/data/brief.json', 'json', 'kobo-panel', 'panel brief', null, 'migrate', 'pending', 'one JSON object'),
 
   -- OpenBot platform's own shared-table store (not an agent-created ad-hoc file)
-  ('Shared/Data/agent-data.db', 'sqlite', 'OpenBot platform', 'built-in shared tables (frontdesk, marketplace_scan, prospect_*, promptlib stats)', null, 'keep', 'kept', 'platform store used by openbot.query_data/execute_data; business rows are candidates to move to Supabase later'),
+  ('Shared/Data/agent-data.db', 'sqlite', 'OpenBot platform', 'built-in shared tables', null, 'keep', 'kept', 'platform store used by openbot.query_data/execute_data'),
+
+  -- agent-data.db business rows, tracked individually (move to Supabase)
+  ('Shared/Data/agent-data.db#marketplace_scan',     'sqlite-table', 'OpenBot platform', 'marketplace scan records', 73, 'migrate', 'pending', 'business rows in OpenBot shared DB'),
+  ('Shared/Data/agent-data.db#prospect_contacts',    'sqlite-table', 'OpenBot platform', 'prospect contacts',        3,  'migrate', 'pending', 'business rows in OpenBot shared DB'),
+  ('Shared/Data/agent-data.db#prospect_leads',       'sqlite-table', 'OpenBot platform', 'prospect leads',           3,  'migrate', 'pending', 'business rows in OpenBot shared DB'),
+  ('Shared/Data/agent-data.db#prospect_touches',     'sqlite-table', 'OpenBot platform', 'prospect touches',         0,  'migrate', 'pending', 'business rows in OpenBot shared DB'),
+  ('Shared/Data/agent-data.db#prospect_suppression', 'sqlite-table', 'OpenBot platform', 'prospect suppression',     1,  'migrate', 'pending', 'business rows in OpenBot shared DB'),
+  ('Shared/Data/agent-data.db#frontdesk_contacts',   'sqlite-table', 'OpenBot platform', 'frontdesk contacts',       3,  'migrate', 'pending', 'business rows in OpenBot shared DB'),
+  ('Shared/Data/agent-data.db#frontdesk_drafts',     'sqlite-table', 'OpenBot platform', 'frontdesk drafts',         4,  'migrate', 'pending', 'business rows in OpenBot shared DB'),
+  ('Shared/Data/agent-data.db#frontdesk_events',     'sqlite-table', 'OpenBot platform', 'frontdesk events',         3,  'migrate', 'pending', 'business rows in OpenBot shared DB'),
+  ('Shared/Data/agent-data.db#outbound_drafts',      'sqlite-table', 'OpenBot platform', 'outbound drafts',          0,  'migrate', 'pending', 'business rows in OpenBot shared DB'),
 
   -- prompt library (Jon''s existing system, embeddings included)
   ('Shared/openbot-promptlib/data/promptlib.sqlite', 'sqlite', 'prompt library', 'items, ratings, usage + sqlite-vec embeddings', null, 'keep', 'kept', 'existing system; migration is its own project'),
@@ -75,8 +86,14 @@ insert into ops.data_store_debt (path, file_type, owner_agent, purpose, row_coun
   -- wiki research snapshot
   ('Shared/wiki/research/triage/triage.csv', 'csv', 'wiki', 'research triage snapshot', 67, 'keep', 'kept', 'research artifact'),
 
-  -- career-ops batch additions (raw source inputs, already merged into tracker)
-  ('Shared/career-ops/batch/tracker-additions/merged/', 'tsv', 'Athena', 'raw batch additions to tracker (30 TSV)', null, 'keep', 'kept', 'source inputs'),
+  -- known non-stores the guard excludes (tracked here so nothing is invisible)
+  ('Shared/books-triage-pipeline/metadata.db', 'db', 'booklet-slicer', 'Calibre library metadata', null, 'keep', 'kept', 'excluded (Calibre metadata.db)'),
+  ('Shared/books-triage-pipeline/metadata_db_prefs_backup.json', 'json', 'booklet-slicer', 'Calibre prefs backup', null, 'keep', 'kept', 'excluded (backup)'),
+  ('Shared/ai-training-courses/portfolio/mslearn-practice-map.xlsx', 'xlsx', 'Chiron', 'generated portfolio export', null, 'keep', 'kept', 'excluded (one-off export)'),
+  ('Shared/reports/marketplace/marketplace-scan-2026-11-11.xlsx', 'xlsx', 'Hypatia', 'marketplace scan report', null, 'keep', 'kept', 'excluded (one-off export)'),
+  ('Shared/reports/marketplace/marketplace-scan-2026-11-11.rows.json', 'json', 'Hypatia', 'marketplace scan report rows', null, 'keep', 'kept', 'excluded (one-off export)'),
+  ('Shared/kobo-panel/data/brief.sample.json', 'json', 'kobo-panel', 'brief sample', null, 'keep', 'kept', 'excluded (sample)'),
+  ('Shared/openbot-library/approvals.json', 'json', 'prompt library', 'approval ledger (approved items)', null, 'keep', 'kept', 'existing prompt-library system'),
 
   -- product-pipeline: pre-Supabase stores, archived (delete pending Jon approval)
   ('Shared/product-pipeline/_archive/2026-11-11-pre-supabase/pipeline.db',                     'sqlite', 'product pipeline', 'pre-Supabase pipeline DB',       null, 'delete', 'pending', 'archived; superseded by Supabase'),
