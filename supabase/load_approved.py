@@ -5,7 +5,8 @@ Run from Shared/docker/supabase after 012/013/014 are applied:
     python load_approved.py
 Reads books-triage-pipeline/reports, ai-training-courses/data, kobo-panel/data
 and upserts into books.*, courses.*, kobo.* via the session pooler as postgres.
-Idempotent: truncates and reloads each table. Prints row counts.
+Idempotent: truncates and reloads each table. Destructive: re-running wipes any rows
+added after the load (one-time migration tool). Prints row counts.
 """
 import csv, io, json, re
 from datetime import datetime
