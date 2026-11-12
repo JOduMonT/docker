@@ -166,7 +166,8 @@ create table if not exists courses.catalog_domains (
   domain_slug text not null references core.domains (slug),
   primary key (course_id, domain_slug)
 );
-insert into courses.catalog_domains (course_id, domain_slug) values
+insert into courses.catalog_domains (course_id, domain_slug)
+  select v.course_id, v.domain_slug from (values
   ('1','philosophy-thinking'), ('1','ai-automation'),
   ('2','ai-automation'), ('2','learning-education'),
   ('3','copilot-m365'), ('3','ai-automation'),
@@ -183,6 +184,7 @@ insert into courses.catalog_domains (course_id, domain_slug) values
   ('14','ai-automation'), ('14','copilot-m365'),
   ('15','ai-automation'), ('15','philosophy-thinking'),
   ('16','security-privacy'), ('16','ai-automation')
+  ) v(course_id, domain_slug) join courses.catalog c on c.legacy_id = v.course_id   -- only courses that exist
   on conflict do nothing;
 
 -- Stories <-> domains, from the comma list in content.stories.themes (kept in sync by trigger).
