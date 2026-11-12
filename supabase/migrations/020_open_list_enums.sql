@@ -1,15 +1,15 @@
--- 020_open_list_enums.sql
+-- 020_open_list_enums.sql  (apply as postgres: python migrations/apply.py migrations/020_open_list_enums.sql)
 -- Step 3: columns with no CHECK yet -> enums (NocoDB Single select / Kanban).
 -- Lists = the distinct values in the data on 2026-11-12, plus the obvious missing ones:
---   courses.catalog.stage      Idea, Outline, Drafted, Rehearsed, Piloted, Delivered (the courses.stages ladder, in order)
---   courses.catalog.format     Class, Webinar
+--   courses.catalog.stage        Idea, Outline, Drafted, Rehearsed, Piloted, Delivered (the courses.stages ladder, in order)
+--   courses.catalog.format       Class, Webinar
 --   courses.references.ref_type  Microsoft Learn, Calibre, Research, Government of Canada
---   books.triage.decision      classified, failed, skipped, dry_run (the values knowledge-triage.py writes)
---   books.triage.moscow        Must, Should, Could (books have no Won't; failed books keep NULL)
---   research.triage.source_type  image, link, link-note, linkedin, video, web, youtube, other
--- Not converted: books.triage.language and research.triage.language (open ISO codes: a new
--- language would make the triage writers fail).
--- A new value later: alter type ... add value '...';
+--   books.triage.decision        classified, failed, skipped, dry_run (the only values the triage scripts write)
+-- Not converted (writers fill them freely, so an enum would make a write fail mid-run; Momus review 2026-11-12):
+--   books.triage.moscow (straight from the model's answer, written after the Calibre writeback),
+--   research.triage.source_type (open list), books.triage.language and research.triage.language (open ISO codes).
+-- Empty strings: none in the 4 converted columns today; the guard below would store any '' as NULL.
+-- Adding a value later: see "Enum columns" in README.md (own migration, before any writer emits it).
 
 do $$
 declare
@@ -17,14 +17,11 @@ declare
     ['courses','course_stage',  'Idea|Outline|Drafted|Rehearsed|Piloted|Delivered'],
     ['courses','course_format', 'Class|Webinar'],
     ['courses','ref_type',      'Microsoft Learn|Calibre|Research|Government of Canada'],
-    ['books','triage_decision', 'classified|failed|skipped|dry_run'],
-    ['books','triage_moscow',   'Must|Should|Could'],
-    ['research','source_type',  'image|link|link-note|linkedin|video|web|youtube|other']];
+    ['books','triage_decision', 'classified|failed|skipped|dry_run']];
   cols text[][] := array[
     ['courses.catalog','stage','courses.course_stage'], ['courses.catalog','format','courses.course_format'],
     ['courses."references"','ref_type','courses.ref_type'],
-    ['books.triage','decision','books.triage_decision'], ['books.triage','moscow','books.triage_moscow'],
-    ['research.triage','source_type','research.source_type']];
+    ['books.triage','decision','books.triage_decision']];
   i int; labels text;
 begin
   for i in 1 .. array_length(spec, 1) loop
@@ -36,7 +33,6 @@ begin
     end if;
   end loop;
   for i in 1 .. array_length(cols, 1) loop
-    -- empty strings would not cast: store them as NULL (none exist today; guard anyway)
     execute format('update %s set %I = null where %I = %L', cols[i][1], cols[i][2], cols[i][2], '');
     execute format('alter table %s alter column %I type %s using %I::%s',
                    cols[i][1], cols[i][2], cols[i][3], cols[i][2], cols[i][3]);
@@ -44,5 +40,4 @@ begin
 end $$;
 
 grant usage on type courses.course_stage, courses.course_format, courses.ref_type to pipeline_agent, nocodb_ro;
-grant usage on type books.triage_decision, books.triage_moscow to pipeline_agent, nocodb_ro;
-grant usage on type research.source_type to pipeline_agent, nocodb_ro;
+grant usage on type books.triage_decision to pipeline_agent, nocodb_ro;

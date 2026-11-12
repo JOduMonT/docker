@@ -1,4 +1,4 @@
--- 019_ops_research_enums.sql
+-- 019_ops_research_enums.sql  (apply as postgres, the apply.py default)
 -- Step 2b of the enum conversion: ops.data_store_debt and research.triage fixed-list columns -> enums
 -- (NocoDB Single select / Kanban). Value lists = the existing CHECKs. No views depend on these.
 

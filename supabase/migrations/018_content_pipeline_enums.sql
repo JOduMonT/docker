@@ -1,4 +1,4 @@
--- 018_content_pipeline_enums.sql
+-- 018_content_pipeline_enums.sql  (apply as postgres, the apply.py default: the 7 recreated views must stay owned by postgres)
 -- (schema edit OFF) shows Single select and allows Kanban. Value lists = the existing CHECKs.
 -- Same text values, no data change. Writers keep working: literals and untyped parameters need
 -- no cast, and an assignment cast text -> enum covers text-typed values.
