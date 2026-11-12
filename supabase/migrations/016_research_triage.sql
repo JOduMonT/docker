@@ -26,7 +26,12 @@ create table if not exists research.triage (
   reason             text,
   workspace_priority smallint,
   created_at         timestamptz not null default now(),
-  constraint research_triage_item_uniq unique (item)
+  -- The routine checks "already triaged?" while the file is still in raw/, but the row stores
+  -- the post-move path (raw/archive/...), so identity is the file name, not the full path.
+  item_name          text generated always as (regexp_replace(item, '^.*[/\\]', '')) stored,
+  constraint research_triage_item_uniq unique (item),
+  constraint research_triage_item_name_uniq unique (item_name),
+  constraint research_triage_total_sum check (total = accuracy + novelty + substance + actionability)
 );
 
 alter table research.triage enable row level security;
