@@ -1,0 +1,28 @@
+# Atomic CRM frontend for Jon's CRM trial. Data lives in the shared local Supabase
+# (schema public + private, auth, storage bucket "attachments"); this container
+# only serves the static app. Localhost only.
+name: atomic-crm
+services:
+  atomic-crm:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?set in .env}
+        VITE_SB_PUBLISHABLE_KEY: ${VITE_SB_PUBLISHABLE_KEY:?set in .env}
+    image: atomic-crm:local
+    container_name: atomic-crm
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=65532,gid=65532,mode=0700
+      - /var/run:uid=65532,gid=65532,mode=0755
+      - /tmp:uid=65532,gid=65532,mode=0700
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:3010:8080"
+    healthcheck:
+      test: ["CMD", "nginx", "-t", "-q"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
