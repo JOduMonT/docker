@@ -1,5 +1,6 @@
 """NocoDB metadata helper for the read-only Supabase base (no source settings are changed).
 
+  python scripts/nc_meta.py add-source SCHEMA          # add a read-only source (nocodb_ro, schema+data read-only)
   python scripts/nc_meta.py sync SOURCE_ALIAS          # meta-diff sync of one source (picks up new DB types)
   python scripts/nc_meta.py fields SCHEMA.TABLE COL..  # print NocoDB's field type (uidt) and options
   python scripts/nc_meta.py kanban-test SCHEMA.TABLE COL  # create a Kanban view grouped by COL, report, delete it
@@ -60,6 +61,29 @@ def table(tok, bid, schema, name):
 def main(a):
     tok = login()
     bid = base(tok)["id"]
+    if a[0] == "add-source":   # read-only source for one schema, same flags as pipeline/content/ops
+        schema = a[1]
+        if schema in sources(tok, bid):
+            print(f"source {schema}: exists"); return 0
+        conn = {"host": "host.docker.internal", "port": 54322, "user": "nocodb_ro.openbot",
+                "password": ENV["NOCODB_RO_PASSWORD"].strip(), "database": "postgres", "ssl": False}
+        for _ in range(60):
+            st, r = call("POST", f"/api/v2/meta/bases/{bid}/sources", {
+                "alias": schema, "type": "pg", "is_schema_readonly": True, "is_data_readonly": True,
+                "inflection_column": "none", "inflection_table": "none",
+                "config": {"client": "pg", "connection": conn, "searchPath": [schema], "pool": {"min": 0, "max": 1}}}, tok)
+            if st in (200, 201):
+                break
+            if "in progress" in str(r):
+                time.sleep(3); continue
+            print(f"source {schema}: {st} {r}"); return 1
+        for _ in range(40):
+            s = sources(tok, bid).get(schema)
+            if s:
+                print(f"source {schema}: created, schema_readonly={s.get('is_schema_readonly')} data_readonly={s.get('is_data_readonly')}")
+                return 0
+            time.sleep(3)
+        print(f"source {schema}: not visible after create"); return 1
     if a[0] == "sync":
         sid = sources(tok, bid)[a[1]]["id"]
         st, r = call("POST", f"/api/v2/meta/bases/{bid}/meta-diff/{sid}", {}, tok)
