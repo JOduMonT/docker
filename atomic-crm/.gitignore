@@ -5,3 +5,5 @@
 .backup-name
 # upstream clone (pinned commit in README)
 src/
+__pycache__/
+*.pyc
