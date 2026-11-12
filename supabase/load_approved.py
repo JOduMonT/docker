@@ -5,11 +5,12 @@ Run from Shared/docker/supabase after 012/013/014 are applied:
     python load_approved.py
 Reads books-triage-pipeline/reports, ai-training-courses/data, kobo-panel/data
 and upserts into books.*, courses.*, kobo.* via the session pooler as postgres.
-Idempotent: truncates and reloads each table. Destructive: re-running wipes any rows
-added after the load (one-time migration tool). Prints row counts.
+Destructive reload (not idempotent): truncates and reloads each table; re-running
+wipes any rows added after the load (one-time migration tool). Prints row counts.
 """
 import csv, io, json, re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import psycopg
@@ -30,16 +31,20 @@ def env(key):
     raise SystemExit(f"{key} missing from {ENV}")
 
 
+LOCAL_TZ = ZoneInfo("America/Toronto")   # k12 local time (source timestamps are naive datetime.now())
+
+
 def parse_ts(s):
     s = (s or "").strip()
     if not s:
         return None
-    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(s, fmt).isoformat()
-        except ValueError:
-            pass
-    return None
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=LOCAL_TZ)   # naive timestamps are local (America/Toronto)
+    return dt.isoformat()
 
 
 def to_int(x):
@@ -59,9 +64,9 @@ def to_bool(x):
     s = str(x).strip().lower() if x is not None else ""
     if s in ("true", "1", "yes", "t", "y"):
         return True
-    if s in ("false", "0", "no", "f", "n", ""):
+    if s in ("false", "0", "no", "f", "n"):
         return False
-    return None
+    return None   # empty/unknown means missing, not False
 
 
 def jsonl(path):
@@ -99,18 +104,13 @@ def main():
           for r in jsonl(BOOKS / "research-log.jsonl")]
     load("books.research_log", ["at", "source", "book_id", "title", "field", "current", "proposed", "meta_confidence", "action"], rl)
 
-    # --- books.triage (csv + jsonl; jsonl has no reason) ---
+    # --- books.triage (triage.csv is the superset; triage.jsonl is a strict subset, skip it) ---
     triage = []
     for r in csv.DictReader(io.StringIO((BOOKS / "triage.csv").read_text(encoding="utf-8", errors="replace"))):
         triage.append((parse_ts(r.get("timestamp")), r.get("filename"), to_int(r.get("book_id")), r.get("decision"),
                        r.get("domain"), r.get("moscow"), to_float(r.get("confidence")), to_bool(r.get("is_new_domain")),
                        r.get("language"), to_int(r.get("pages")), to_int(r.get("words")), r.get("source_hash"),
                        r.get("reason"), to_bool(r.get("wrote_back")), to_int(r.get("workspace_priority"))))
-    for r in jsonl(BOOKS / "triage.jsonl"):
-        triage.append((parse_ts(r.get("timestamp")), r.get("filename"), to_int(r.get("book_id")), r.get("decision"),
-                       r.get("domain"), r.get("moscow"), to_float(r.get("confidence")), to_bool(r.get("is_new_domain")),
-                       r.get("language"), to_int(r.get("pages")), to_int(r.get("words")), r.get("source_hash"),
-                       None, to_bool(r.get("wrote_back")), to_int(r.get("workspace_priority"))))
     load("books.triage", ["at", "filename", "book_id", "decision", "domain", "moscow", "confidence", "is_new_domain",
                           "language", "pages", "words", "source_hash", "reason", "wrote_back", "workspace_priority"], triage)
 
