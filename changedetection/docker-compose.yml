@@ -58,7 +58,7 @@ services:
 
   browser-sockpuppet-chrome:
     hostname: browser-sockpuppet-chrome
-    image: dgtlmoon/sockpuppetbrowser:0.0.3
+    image: dgtlmoon/sockpuppetbrowser:0.0.5
     container_name: browser-sockpuppet-chrome
     restart: unless-stopped
     init: true
