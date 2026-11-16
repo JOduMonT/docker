@@ -76,6 +76,11 @@ def jsonl(path):
 
 
 def main():
+    # Retired 2026-11-16: live data moved to JDmnT (hosted). This one-off loader TRUNCATEs
+    # tables and reloads the 2026-11-12 files, so it must never run against live data, and
+    # the local stack is a read-only fallback. Kept for the record only.
+    raise SystemExit("load_approved.py is retired (data moved to JDmnT on 2026-11-16); "
+                     "it truncates tables, so it refuses to run against either database")
     conn = psycopg.connect(host="127.0.0.1", port=int(env("POSTGRES_PORT") or 54322),
                            dbname="postgres", user=f"postgres.{env('POOLER_TENANT_ID')}",
                            password=env("POSTGRES_PASSWORD"), connect_timeout=8)

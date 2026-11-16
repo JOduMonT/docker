@@ -1,7 +1,7 @@
-# NocoDB: Airtable-style views over the local Supabase (dev only, localhost only).
+# NocoDB: Airtable-style views over Supabase JDmnT (hosted, since 2026-11-16; UI on localhost only).
 # NocoDB's own metadata stays in SQLite on the volume below, never in Supabase.
-# Supabase is added inside NocoDB as an external source (session pooler,
-# host.docker.internal:54322) with the read-only role nocodb_ro.
+# Supabase is added inside NocoDB as an external source (JDmnT session pooler,
+# sslmode require; scripts/nc_meta.py add-source) with the read-only role nocodb_ro.
 name: nocodb
 services:
   nocodb:

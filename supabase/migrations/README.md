@@ -1,6 +1,19 @@
-# Database migrations (local Supabase)
+# Database migrations (Supabase JDmnT, hosted)
 
-Applied by hand, in order, each in one transaction:
+Since 2026-11-16 the live database is the hosted project JDmnT (ref
+`gwkolzliiqxkxdchgetp`). `apply.py` targets it by default (`--target cloud`:
+postgres through the session pooler, role passwords from
+`Shared/_secrets/jdmnt.env`, each file recorded in
+`supabase_migrations.schema_migrations`). The local stack is a read-only
+fallback; `--target local` is for tests (`--db pipeline_test`) and rollback.
+Every numbered file 001–027 is applied to JDmnT (see `../CLOUD-MOVE.md`).
+
+```bash
+python migrations/apply.py migrations/028_next_change.sql            # JDmnT
+python migrations/apply.py --target local --db pipeline_test migrations/028_next_change.sql
+```
+
+Historical local procedure (each file in one transaction):
 
 ```bash
 python migrations/apply.py migrations/001_ops_tasks.sql

@@ -21,6 +21,13 @@ B = "http://127.0.0.1:8091"
 BASE_TITLE = "SupaBase"
 
 
+def cloud_conn():
+    """nocodb_ro on JDmnT (hosted Supabase, since 2026-11-16), from Shared/_secrets/jdmnt.env; prints nothing."""
+    j = dict(re.findall(r"^([A-Z_]+)=(.*)$", (HERE.parent.parent / "_secrets" / "jdmnt.env").read_text(encoding="utf-8"), re.M))
+    return {"host": j["DB_HOST"].strip(), "port": int(j["POSTGRES_PORT"]), "user": f"nocodb_ro.{j['POOLER_TENANT_ID'].strip()}",
+            "password": j["NOCODB_RO_PASSWORD"].strip(), "database": "postgres", "ssl": {"rejectUnauthorized": False}}
+
+
 def call(method, path, body=None, tok=None):
     req = urllib.request.Request(B + path, method=method,
                                  data=json.dumps(body).encode() if body is not None else None,
@@ -65,8 +72,7 @@ def main(a):
         schema = a[1]
         if schema in sources(tok, bid):
             print(f"source {schema}: exists"); return 0
-        conn = {"host": "host.docker.internal", "port": 54322, "user": "nocodb_ro.openbot",
-                "password": ENV["NOCODB_RO_PASSWORD"].strip(), "database": "postgres", "ssl": False}
+        conn = cloud_conn()
         for _ in range(60):
             st, r = call("POST", f"/api/v2/meta/bases/{bid}/sources", {
                 "alias": schema, "type": "pg", "is_schema_readonly": True, "is_data_readonly": True,

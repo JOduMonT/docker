@@ -1,7 +1,7 @@
-"""Connect the local Supabase to NocoDB as read-only data sources, then verify.
+"""Connect Supabase (JDmnT, hosted) to NocoDB as read-only data sources, then verify.
 
 Creates (once) the base "Supabase (read-only)" with one source per schema
-(pipeline, content, ops) through the session pooler host.docker.internal:54322
+(pipeline, content, ops) through the JDmnT session pooler (hosted Supabase)
 as nocodb_ro (migration 008). Sources are marked schema- and data-read-only in
 NocoDB, and the role itself can only SELECT. Then it lists the tables NocoDB
 sees and proves a write fails. Reads secrets from ../.env; prints none.
@@ -21,6 +21,13 @@ ENV = dict(re.findall(r"^([A-Z_]+)=(.*)$", (HERE / ".env").read_text(encoding="u
 B = "http://127.0.0.1:8091"          # 127.0.0.1: Python resolves "localhost" slowly here
 TITLE = "Supabase (read-only)"
 SCHEMAS = ("pipeline", "content", "ops")
+
+
+def cloud_conn():
+    """nocodb_ro on JDmnT (hosted Supabase, since 2026-11-16), from Shared/_secrets/jdmnt.env; prints nothing."""
+    j = dict(re.findall(r"^([A-Z_]+)=(.*)$", (HERE.parent.parent / "_secrets" / "jdmnt.env").read_text(encoding="utf-8"), re.M))
+    return {"host": j["DB_HOST"].strip(), "port": int(j["POSTGRES_PORT"]), "user": f"nocodb_ro.{j['POOLER_TENANT_ID'].strip()}",
+            "password": j["NOCODB_RO_PASSWORD"].strip(), "database": "postgres", "ssl": {"rejectUnauthorized": False}}
 
 
 def call(method, path, body=None, tok=None):
@@ -44,8 +51,7 @@ def main() -> int:
             print("no base yet"); return 1
         base = call("POST", "/api/v2/meta/bases", {"title": TITLE}, tok)[1]
     bid = base["id"]
-    conn = {"host": "host.docker.internal", "port": 54322, "user": "nocodb_ro.openbot",
-            "password": ENV["NOCODB_RO_PASSWORD"].strip(), "database": "postgres", "ssl": False}
+    conn = cloud_conn()
 
     def sources():
         return {s.get("alias"): s for s in call("GET", f"/api/v2/meta/bases/{bid}/sources", tok=tok)[1]["list"]}
