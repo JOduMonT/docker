@@ -28,3 +28,12 @@ docker exec supabase-db psql -U supabase_admin -tAc "select r, has_schema_privil
 ```
 
 Every line must end in `f`. `update.sh` prints this reminder.
+
+## Enum columns (017-020)
+
+Fixed-list columns are Postgres enums so NocoDB (schema edit off) shows them as Single select and allows Kanban.
+Writers send plain strings: literals and untyped parameters work, and each type has an assignment cast from text.
+To add a value: write a new migration with `alter type <schema>.<type> add value '<label>';` and apply it
+**before** any writer emits the new value (inside a transaction the new label is usable only after commit).
+Labels can never be removed or renamed without rebuilding the type (and recreating the views that use it).
+Columns that writers fill freely stay text (books.triage.moscow, research.triage.source_type, the language columns).
