@@ -690,3 +690,4 @@ fi
 write_stamp
 print_next_steps
 log "Update applied cleanly."
+warn "After the stack restarts, re-apply migrations/005_revoke_pg_net_public.sql and run its check (migrations/README.md)."
