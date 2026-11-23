@@ -416,7 +416,7 @@ services:
 
   meta:
     container_name: supabase-meta
-    image: supabase/postgres-meta:v0.100.0
+    image: supabase/postgres-meta:v0.100.1
     restart: unless-stopped
     depends_on:
       db:
